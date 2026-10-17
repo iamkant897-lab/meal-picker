@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>오늘 뭐 먹지?</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="어제 뭐 먹었는지, 배고픔, 예산만 고르면 와이프 최애 위주로 수원 맛집을 골라줘요.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="오늘 뭐 먹지? 🍓">
+<meta property="og:description" content="와이프 최애 위주 메뉴 추천 + 수원 맛집 + 룰렛">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:url" content="https://iamkant897-lab.github.io/meal-picker/">
+<meta property="og:image" content="https://iamkant897-lab.github.io/meal-picker/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🍓%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#e8445a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: 한 손 세로 스크롤 한 줄 흐름. 질문 칩 → 후보 3장 → 식당 카드 + 지도. 딸기(포인트)와 귤(보조) 색. */
+:root{
+  --bg:#fff8f6; --surface:#ffffff; --ink:#3a2a2e; --muted:#8a6f75; --line:#f1dcdc;
+  --berry:#e8445a; --berry-soft:#ffe3e7; --tang:#f59a23; --tang-soft:#fff0d9;
+  --ok:#2f9e6a; --ok-soft:#e1f5ea; --warn:#b7791f; --warn-soft:#fdf1d8;
+  --shadow:0 6px 18px rgba(232,68,90,.10);
+  --f-display:"Jua","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1e1619; --surface:#2a1f23; --ink:#f6e9ec; --muted:#bfa3aa; --line:#43323a;
+  --berry:#ff6b80; --berry-soft:#4a2530; --tang:#ffb454; --tang-soft:#47331c;
+  --ok:#5fd39b; --ok-soft:#1d3a2c; --warn:#f0c060; --warn-soft:#3f3218;
+  --shadow:0 6px 18px rgba(0,0,0,.35); color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#1e1619; --surface:#2a1f23; --ink:#f6e9ec; --muted:#bfa3aa; --line:#43323a;
+  --berry:#ff6b80; --berry-soft:#4a2530; --tang:#ffb454; --tang-soft:#47331c;
+  --ok:#5fd39b; --ok-soft:#1d3a2c; --warn:#f0c060; --warn-soft:#3f3218;
+  --shadow:0 6px 18px rgba(0,0,0,.35); color-scheme:dark;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 120px}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:2.1rem;line-height:1.1}
+h2{font-size:1.35rem}
+h3{font-size:1.15rem}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.sub{color:var(--muted);font-size:.9rem;margin-top:4px}
+.berry{display:inline-block;transform:rotate(-8deg)}
+section.panel{background:var(--surface);border-radius:20px;padding:18px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:16px}
+.q{display:flex;flex-direction:column;gap:8px}
+.q-label{font-family:var(--f-display);font-size:1.02rem}
+.q-label small{font-family:var(--f-body);color:var(--muted);font-size:.8rem;margin-left:6px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{appearance:none;border:1.5px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:.9rem;
+  padding:6px 11px;border-radius:999px;cursor:pointer;transition:transform .12s,background .12s,border-color .12s}
+.chip:hover{border-color:var(--berry)}
+.chip[aria-pressed="true"]{background:var(--berry);border-color:var(--berry);color:#fff}
+.chip:active{transform:scale(.95)}
+button:focus-visible,a:focus-visible{outline:3px solid var(--tang);outline-offset:2px}
+.actions{display:grid;grid-template-columns:1.4fr 1fr;gap:10px;max-width:560px;margin:0 auto}
+.actionbar{position:fixed;left:0;right:0;bottom:0;z-index:1000;background:var(--bg);border-top:1px solid var(--line);
+  padding-top:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.status{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:.84rem;color:var(--muted)}
+.rt{font-weight:700;color:var(--tang)}.rt.none{color:var(--muted);font-weight:400}
+.st{font-weight:700}.st.open{color:var(--ok)}.st.brk{color:var(--warn)}.st.shut{color:var(--muted)}
+details.more summary{cursor:pointer;font-size:.84rem;color:var(--muted)}
+details.more[open]{display:flex;flex-direction:column;gap:8px}
+details.more>*+*{margin-top:8px}
+.toggle{display:flex;align-items:center;gap:8px;font-size:.88rem}
+
+.btn{appearance:none;border:none;font:inherit;font-family:var(--f-display);font-size:1.08rem;padding:13px 10px;border-radius:16px;cursor:pointer;
+  background:var(--berry);color:#fff;transition:transform .12s}
+.btn:active{transform:scale(.97)}
+.btn.alt{background:var(--tang-soft);color:var(--ink);border:1.5px dashed var(--tang)}
+.btn.small{font-size:.9rem;padding:8px 12px;border-radius:12px}
+.btn.ghost{background:transparent;color:var(--muted);border:1.5px solid var(--line)}
+.recent{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.85rem;color:var(--muted)}
+.tag{display:inline-flex;align-items:center;gap:4px;background:var(--tang-soft);color:var(--ink);border-radius:999px;padding:2px 10px;font-size:.8rem}
+.linkish{background:none;border:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:.8rem;cursor:pointer;padding:0}
+/* roulette */
+.roulette{display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 0}
+.slot{font-family:var(--f-display);font-size:2rem;min-height:3rem;display:flex;align-items:center;gap:10px;color:var(--berry)}
+.slot.spin{animation:wob .12s infinite alternate}
+@keyframes wob{from{transform:translateY(-2px)}to{transform:translateY(2px)}}
+/* candidates */
+.cands{display:grid;gap:10px}
+.cand{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;text-align:left;width:100%;
+  appearance:none;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;padding:12px 14px;border-radius:16px;cursor:pointer}
+.cand:hover{border-color:var(--berry)}
+.cand.on{border-color:var(--berry);background:var(--berry-soft)}
+.cand .ico{font-size:1.9rem;line-height:1}
+.cand .nm{font-family:var(--f-display);font-size:1.15rem}
+.cand .heart{font-family:var(--f-body);font-size:.72rem;color:var(--berry);background:var(--berry-soft);border-radius:99px;padding:1px 7px;vertical-align:middle;white-space:nowrap}
+.cand .heart.tr{color:var(--tang);background:var(--tang-soft)}.cand .heart.td{color:var(--ok);background:var(--ok-soft)}
+.morebox{margin-top:12px}.morebox summary{cursor:pointer;font-family:var(--f-display);padding:6px 0}.morebox summary small{color:var(--muted);font-family:var(--f-body);font-size:.78rem;margin-left:6px}.mrow{display:flex;gap:8px;align-items:flex-start;margin-top:8px}.mg{flex:0 0 3.2em;font-size:.82rem;color:var(--muted);padding-top:8px}.reroll{margin-top:10px;width:100%}
+.cand .why{font-size:.82rem;color:var(--muted);min-width:0}
+.rank{font-family:var(--f-display);color:var(--berry);font-size:.95rem}
+/* restaurants */
+.rlist{display:grid;gap:12px}
+.card{border:1.5px solid var(--line);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.card.far{opacity:.72}
+.card-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.card-h h3{min-width:0}
+.badge{flex:none;font-size:.75rem;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.badge.ok{background:var(--ok-soft);color:var(--ok)}
+.badge.warn{background:var(--warn-soft);color:var(--warn)}
+.menu{font-size:.92rem}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:.84rem;color:var(--muted)}
+.meta dt{color:var(--muted)}
+.meta dd{margin:0;color:var(--ink);min-width:0;overflow-wrap:anywhere}
+.meta dd.nocoord{color:var(--warn)}
+.note{font-size:.88rem;background:var(--berry-soft);border-radius:12px;padding:6px 10px}
+.vnote{font-size:.76rem;color:var(--muted)}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.links a,.links button{font:inherit;font-size:.85rem;text-decoration:none;border-radius:12px;padding:7px 11px;border:1.5px solid var(--line);color:var(--ink);background:transparent;cursor:pointer}
+.links a.kakao{background:#fee500;border-color:#fee500;color:#191600}
+.links a.naver{background:#03c75a;border-color:#03c75a;color:#fff}
+#map{height:260px;border-radius:16px;overflow:hidden;border:1.5px solid var(--line);z-index:0}
+.mapbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.8rem;color:var(--muted)}
+.hint{font-size:.82rem;color:var(--muted)}
+.dessert{font-size:.85rem;color:var(--muted);text-align:center}
+.theme-t{flex:none}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>오늘 뭐 먹지? <span class="berry">🍓</span></h1>
+      <p class="sub">와이프 최애 메뉴 기준 · 수원 팔달구 출발 · 2인</p>
+    </div>
+    <button class="btn small ghost theme-t" id="themeBtn" type="button" aria-label="화면 테마 바꾸기">🌙</button>
+  </header>
+
+  <section class="panel" id="quiz" aria-labelledby="qTitle">
+    <h2 id="qTitle">30초 질문</h2>
+    <div id="questions"></div>
+    <div class="recent" id="recentBox"></div>
+  </section>
+
+  <section class="panel" id="rouletteBox" hidden aria-live="polite">
+    <div class="roulette">
+      <div class="slot" id="slot">🍗 치킨</div>
+      <div class="hint" id="slotHint">빙글빙글…</div>
+    </div>
+  </section>
+
+  <section class="panel" id="result" hidden aria-labelledby="rTitle">
+    <h2 id="rTitle">오늘의 후보</h2>
+    <div class="cands" id="cands"></div>
+    <button class="btn small ghost reroll" id="rerollBtn" type="button">🔄 다른 후보 3개</button>
+    <details class="morebox" id="moreBox"><summary>메뉴 직접 고르기 <small>♥ 와이프 최애 · 🔥 요즘 뜸 · 🏯 전통</small></summary><div id="moreCats"></div></details>
+  </section>
+
+  <section class="panel" id="places" hidden aria-labelledby="pTitle">
+    <div class="card-h">
+      <h2 id="pTitle">맛집</h2>
+      <button class="btn small" id="ateBtn" type="button">이거 먹기로 함!</button>
+    </div>
+    <p class="hint" id="catDesc"></p>
+    <div class="toggle"><button class="chip" id="openOnly" type="button" aria-pressed="true">지금 열린 곳만</button><span class="hint" id="openMsg"></span></div>
+    <div id="mapWrap">
+      <div id="map" role="region" aria-label="맛집 지도"></div>
+      <div class="mapbar">
+        <span id="mapMsg">빨간 점: 출발점(수원화성·팔달구)</span>
+        <button class="linkish" id="geoBtn" type="button">주소로 위치 찍어보기 (참고용)</button>
+      </div>
+    </div>
+    <p class="hint" id="mapOff" hidden>지도를 불러올 수 없는 환경이라 카드만 보여드려요. 위치는 카카오맵·네이버지도 버튼으로 확인하세요.</p>
+    <div class="rlist" id="rlist"></div>
+  </section>
+
+  <p class="dessert" id="dessert"></p>
+</div>
+<div class="actionbar">
+  <div class="actions">
+    <button class="btn" id="goBtn" type="button">메뉴 추천 받기</button>
+    <button class="btn alt" id="randBtn" type="button">그냥 랜덤! 🎲</button>
+  </div>
+</div>
+
+<script type="application/json" id="trend-data">
+{"updatedAt": "2026-10-17", "trend": [{"cat": "donburi", "why": "한 그릇 덮밥 수요가 늘고 있어요 (덮밥류 +8.2%)", "source": "https://www.thinkfood.co.kr/news/articleView.html?idxno=103743"}, {"cat": "poke", "why": "샐러드 한 그릇 식사가 크게 늘었어요 (+22.2%)", "source": "https://www.thinkfood.co.kr/news/articleView.html?idxno=103743"}, {"cat": "yukhoe", "why": "육회·물회가 '컵푸드' 유행 메뉴로 꼽혀요", "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"}, {"cat": "mala", "why": "마라탕에 마라 꼬치까지, 여전히 유행", "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"}, {"cat": "hoe", "why": "요즘 보양식으로 회를 많이 찾아요", "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"}], "trad": [{"cat": "galbi", "why": "수원 하면 왕갈비, 수원 대표 음식", "source": null}, {"cat": "tongdak", "why": "팔달문 통닭거리의 가마솥 옛날통닭", "source": null}, {"cat": "sundae", "why": "지동시장 순대타운 순대볶음", "source": null}, {"cat": "hansik", "why": "한 상 가득 한정식·비빔밥", "source": null}, {"cat": "gukbap", "why": "뜨끈한 국밥·찌개 한 그릇", "source": null}, {"cat": "noodle", "why": "칼국수·냉면 노포", "source": null}], "cats": []}
+</script>
+<script type="application/json" id="restaurant-data">
+[{"id": "kyochon-suwonstn", "category": "chicken", "name": "교촌치킨 수원역점", "menu": "허니콤보 23,000원 · 후라이드한마리 21,000원", "address": "경기도 수원시 팔달구 갓매산로 58", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대 (2인 한 마리)", "hours": {"open": "12:00", "close": "01:30"}, "note": "교촌 최애 라인! 웨지감자 4,000원 추가 추천", "rating": 4.0, "ratingCount": 1, "reviewNote": "체인점이라 맛은 어느 매장이나 비슷해요", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-12 블로그 후기 확인", "source": "https://www.diningcode.com/profile.php?rid=cnjvpYiXhIbs", "checkedAt": "2026-10-17"}, {"id": "kyochon-jowon1", "category": "chicken", "name": "교촌치킨 조원1호점", "menu": "허니갈릭윙콤비 25,000원 · 반반순살(간장+레드) 23,000원", "address": "경기도 수원시 장안구 조원로 71 1층", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대 (2인 한 마리)", "hours": {"open": "10:30", "close": "23:00"}, "note": "윙 콤비 메뉴가 있어서 버팔로윙 땡길 때도 괜찮아요", "rating": 4.0, "ratingCount": 1, "reviewNote": "체인점이라 맛은 어느 매장이나 비슷해요", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시 (최근 후기 날짜는 연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=JAyLvN9VDUt5", "checkedAt": "2026-10-17"}, {"id": "goobne-seryu", "category": "chicken", "name": "굽네치킨 수원세류점", "menu": "고추바사삭 19,900원 · 오리지널 17,900원", "address": "경기도 수원시 권선구 덕영대로 1113-10", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대 (2인 한 마리)", "hours": {"open": "11:00", "close": "03:00"}, "note": "오븐구이라 가볍게. 볼케이노는 매장에 메뉴 있는지 주문 때 확인", "rating": null, "ratingCount": null, "reviewNote": "다이닝코드 평점 없음, 체인점", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 11:00~03:00", "source": "https://www.diningcode.com/profile.php?rid=QUCzEm8NFdDW", "checkedAt": "2026-10-17"}, {"id": "goobne-ingye", "category": "chicken", "name": "굽네치킨 인계동수원점", "menu": "볼케이노 20,900원 · 고추바사삭 19,900원", "address": "경기도 수원시 팔달구 중부대로 192 1층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대 (2인 한 마리)", "hours": null, "note": "굽네 볼케이노 메뉴가 페이지에서 확인된 매장", "rating": null, "ratingCount": null, "reviewNote": "다이닝코드 평점 없음, 체인점", "verified": false, "verifyNote": "주소·메뉴는 확인, 영업 상태는 '영업시간 확인 필요'로만 표시 (2025-12 블로그 후기는 있음)", "source": "https://www.diningcode.com/profile.php?rid=bcLoQ9K1VSo3", "checkedAt": "2026-10-17"}, {"id": "sushisora-gwanggyo", "category": "sushi", "name": "스시소라 광교점", "menu": "런치 오마카세 50,000원 · 디너 오마카세 100,000원", "address": "경기도 수원시 영통구 센트럴타운로 85 광교아브뉴프랑 1층 C101~C102호", "area": "영통", "lat": null, "lng": null, "price": 3, "priceText": "1인 5만원~", "hours": {"open": "12:00", "close": "21:30", "note": "주말은 11:30~21:30"}, "note": "기념일용 가성비 오마카세, 캐치테이블 예약 · 무료주차", "rating": 4.5, "ratingCount": 4, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 폐업 표시 없음, 방문자 리뷰 '1일 전' 확인", "source": "https://www.diningcode.com/profile.php?rid=3tuDPa12ErzN", "checkedAt": "2026-10-17"}, {"id": "choisushi", "category": "sushi", "name": "초이스시", "menu": "B스시(12pcs) 20,000원 · C스시(15pcs) 25,000원 · 2인스페셜 40,000원", "address": "경기도 수원시 팔달구 팔달문로153번길 7 스타맨션 1층 101호", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:30", "close": "21:00", "closed": [2]}, "note": "두툼한 회 + 수제 새우초밥, 밥양·와사비 조절 가능 (화요일 휴무)", "rating": 5.0, "ratingCount": 4, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 2025-09 리뷰·블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=ayoRr0cwnNCC", "checkedAt": "2026-10-17"}, {"id": "gyumin-chobap", "category": "sushi", "name": "규민초밥", "menu": "규민초밥 27,000원 · 특초밥 35,000원 · 메로구이 26,000원", "address": "경기도 수원시 영통구 권선로882번길 71-21 1층", "area": "권선", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:30", "close": "21:30", "break": "15:00-17:00", "closed": [1]}, "note": "신동 카페거리 숙성초밥, 웨이팅 있는 편 (월요일 휴무)", "rating": 4.6, "ratingCount": 8, "reviewNote": "신선한 재료, 밥 간이 좋다는 평", "verified": false, "verifyNote": "주소·메뉴·영업시간은 확인, '영업 중' 표시나 연도 있는 최근 후기는 못 찾음", "source": "https://www.diningcode.com/profile.php?rid=4fXODRM072Kp", "checkedAt": "2026-10-17"}, {"id": "sushiraku", "category": "sushi", "name": "스시라쿠", "menu": "스시 오마카세 60,000원 (평일 런치 55,000원)", "address": "경기도 화성시 병점구 영통로 66 반월메디컬프라자 2층 214호", "area": "화성반월", "lat": null, "lng": null, "price": 3, "priceText": "1인 5만원~", "hours": {"open": "12:00", "close": "21:00", "break": "13:10-17:30", "note": "블로그엔 월요일 휴무로 나와 있어요"}, "note": "다찌석 위주의 조용한 동네 오마카세", "rating": 4.9, "ratingCount": 6, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시 (연도 있는 최신 리뷰는 2024-10)", "source": "https://www.diningcode.com/profile.php?rid=YY5YthKW8kzq", "checkedAt": "2026-10-17"}, {"id": "shabu20-ingye", "category": "shabu", "name": "샤브20 수원인계점", "menu": "평일런치 25,900원 · 디너/주말 30,900원 (고기 무제한)", "address": "경기도 수원시 팔달구 권광로 271 2층", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:00", "close": "22:00"}, "note": "고기 무제한 + 샐러드바, 깔끔한 신규 매장", "rating": 5.0, "ratingCount": 1, "reviewNote": null, "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=QbfZczOCP77Y", "checkedAt": "2026-10-17"}, {"id": "shabuallday-jeongja", "category": "shabu", "name": "샤브올데이 수원정자점", "menu": "평일점심 24,900원 · 저녁/주말 29,900원 (고기 무제한)", "address": "경기도 수원시 장안구 장안로 73 2층", "area": "장안", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:00", "close": "21:30", "break": "15:00-17:00", "note": "주말은 브레이크 없다는 후기도 있어요"}, "note": "넓은 매장, 무료주차·발렛", "rating": 4.6, "ratingCount": 13, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-08 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=vPVW57MXwF9P", "checkedAt": "2026-10-17"}, {"id": "shabumeal-suwonstn", "category": "shabu", "name": "샤브밀", "menu": "평일점심 19,800원 · 평일저녁 22,800원 (무제한)", "address": "경기도 수원시 팔달구 향교로 2, 2층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 2만원 안팎", "hours": {"open": "11:00", "close": "22:00", "note": "금·토는 23:00까지"}, "note": "샤브 + 월남쌈 + 편백찜까지 무한, 수원역 근처", "rating": 4.8, "ratingCount": 12, "reviewNote": "고기 종류가 다양하고 비계가 적다는 평", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시 (최근 후기 날짜는 연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=rBBwhm68YMJn", "checkedAt": "2026-10-17"}, {"id": "sodamchon-jeongja", "category": "shabu", "name": "소담촌 수원정자점", "menu": "월남쌈 버섯샤브 23,900원 · 점심특선 15,900원", "address": "경기도 수원시 장안구 정자천로 171 (경성빌딩)", "area": "장안", "lat": null, "lng": null, "price": 2, "priceText": "1인 1~2만원대", "hours": {"open": "11:00", "close": "21:00"}, "note": "버섯 듬뿍, 깔끔한 육수", "rating": 4.9, "ratingCount": 6, "reviewNote": "맛 평가 전원 '좋음'", "verified": false, "verifyNote": "주소·메뉴는 확인, 영업 상태 표시와 연도 있는 최근 후기는 못 찾음", "source": "https://www.diningcode.com/profile.php?rid=Xq2lxZehkal0", "checkedAt": "2026-10-17"}, {"id": "yakinikuru-suwonstn", "category": "yakiniku", "name": "야키니쿠루 수원역본점", "menu": "A코스 29,800원 · B코스 39,800원 · C코스 49,800원", "address": "경기도 수원시 팔달구 향교로3번길 10 1층", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 3~4만원", "hours": {"open": "16:00", "close": "23:00", "weekend": {"open": "12:00", "close": "23:00"}}, "note": "일본풍 무한리필, 레일 기차로 고기가 배달돼요", "rating": 4.4, "ratingCount": 16, "reviewNote": "최상급 고기는 아니지만 골라먹는 재미가 있다는 평", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=FBSdZjgT23Rc", "checkedAt": "2026-10-17"}, {"id": "yakinikuha", "category": "yakiniku", "name": "야키니쿠하", "menu": "야키니쿠 소량세트(2인) 40,000원 · 오사카 모츠나베 33,000원", "address": "경기도 수원시 영통구 영통로214번길 41 1층", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "17:00", "close": "01:00"}, "note": "망포역 먹자골목 숯불 야키니쿠, 콜키지 프리 (저녁 17시~)", "rating": 4.5, "ratingCount": 4, "reviewNote": "고기 품질 호평, 불이 센 편", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=yvVBgRplvcmH", "checkedAt": "2026-10-17"}, {"id": "yoshiya-mangpo", "category": "yakiniku", "name": "요시야 야키니쿠 영통망포역점", "menu": "후타리 세트(2인 320g) 49,800원 · 와규 우설 24,800원", "address": "경기도 수원시 영통구 영통로218번길 56 1층 101호", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 3만원 안팎", "hours": {"open": "17:00", "close": "23:00", "closed": [0]}, "note": "우설 전문, 파티션 좌석이라 둘이 오붓하게 (일요일 휴무)", "rating": 4.9, "ratingCount": 46, "reviewNote": "평가 46명 중 대부분 우설·세트 만족", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=43KStGQuNLDC", "checkedAt": "2026-10-17"}, {"id": "bukyung-songjuk", "category": "chinese", "name": "북경", "menu": "깐풍기 소 24,000원/중 29,000원 · 간짜장 8,000원", "address": "경기도 수원시 장안구 송원로59번길 8 송죽빌딩 1층", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "10:30", "close": "20:00"}, "note": "옛날 중국집 감성, 깐풍기 사이즈 고를 수 있음", "rating": 4.4, "ratingCount": 3, "reviewNote": null, "verified": true, "verifyNote": "다이닝코드 2026-01 블로그 후기 확인", "source": "https://www.diningcode.com/profile.php?rid=hyPaY04hV4f7", "checkedAt": "2026-10-17"}, {"id": "april-ak", "category": "jjukkumi", "name": "사월에보리밥 청밀당 AK플라자 수원점", "menu": "직화쭈꾸미(250g) 16,000원 · 청밀당 보리한상 12,000원", "address": "경기 수원시 팔달구 덕영대로 924 AK플라자 6층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "10:30", "close": "20:30"}, "note": "쭈꾸미 + 보리밥 조합 그대로! 반찬·밥 셀프 리필", "rating": 4.0, "ratingCount": 1, "reviewNote": "쭈꾸미 한상은 좋고 단품 가성비는 아쉽다는 평", "verified": true, "verifyNote": "다이닝코드 2025-07 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=GP3YrMP7HuHq", "checkedAt": "2026-10-17"}, {"id": "april-buksuwon", "category": "jjukkumi", "name": "사월에보리밥과쭈꾸미 북수원홈플러스점", "menu": "직화쭈꾸미(250g) 16,000원 · 곤드레보리솥밥한상 10,900원", "address": "경기도 수원시 장안구 경수대로 930 홈플러스 북수원점 1층", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "20:30"}, "note": "가성비 보리밥집, 반찬 셀프", "rating": 4.9, "ratingCount": 4, "reviewNote": "쭈꾸미가 부드럽고 불맛 난다는 평", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=5jAKbJ6bjr3p", "checkedAt": "2026-10-17"}, {"id": "meokgobori", "category": "jjukkumi", "name": "먹고보리", "menu": "보리정식 16,000원 · 먹고정식 21,000원", "address": "경기도 수원시 영통구 웰빙타운로36번길 46-107", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "11:00", "close": "20:30", "note": "월요일은 14:00까지"}, "note": "광교 보리밥 + 쭈꾸미·제육 정식, 매장 앞 주차 3~4대", "rating": 5.0, "ratingCount": 2, "reviewNote": null, "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-10 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=YZtkMthnwHE0", "checkedAt": "2026-10-17"}, {"id": "geujipjjukkumi", "category": "jjukkumi", "name": "그집쭈꾸미 수원본점", "menu": "쭈꾸미볶음 12,000원 · 삼겹살쭈꾸미 14,000원 (2인 이상)", "address": "경기도 수원시 팔달구 화양로 56 2층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "21:30", "break": "15:00-16:30", "closed": [1], "note": "일요일은 20:00까지"}, "note": "불향 쭈꾸미 + 계란찜. 보리밥은 아니고 흑미밥 (월요일 휴무)", "rating": 5.0, "ratingCount": 1, "reviewNote": "불향과 통통한 쭈꾸미 호평", "verified": true, "verifyNote": "다이닝코드 오늘 영업시간 표시 (최근 후기 날짜는 연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=7lUx764VUxFT", "checkedAt": "2026-10-17"}, {"id": "galchibapsang", "category": "fish", "name": "갈치밥상 수원점", "menu": "갈치구이정식 16,000원 · 모듬생선구이정식(2인) 40,000원", "address": "경기도 수원시 권선구 금호로 140 2층", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "11:00", "close": "21:00"}, "note": "갈치구이 전문, 넓은 주차장 + 셀프 반찬바", "rating": 4.0, "ratingCount": 4, "reviewNote": "조림 양념은 호평, 생선 신선도는 평이 엇갈림", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-10 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=Qiv1c9GACh6h", "checkedAt": "2026-10-17"}, {"id": "pungeo", "category": "fish", "name": "풍어생선구이정식", "menu": "갈치구이 23,000원 · 삼치구이 19,000원 · 고등어구이 17,000원", "address": "경기도 수원시 장안구 천천로210번길 17-12", "area": "장안", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원 안팎", "hours": {"open": "11:00", "close": "21:00", "break": "15:30-17:00"}, "note": "연탄불 생선구이 + 돌솥밥, 점심에도 만석 잦음", "rating": 4.7, "ratingCount": 7, "reviewNote": "'촉촉담백 최고' 평", "verified": true, "verifyNote": "다이닝코드 2025-09 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=mbLUN9hvKE70", "checkedAt": "2026-10-17"}, {"id": "taero", "category": "fish", "name": "태로", "menu": "화덕 고등어구이 16,000원 · 대삼치구이 17,000원 · 순살갈치 무조림 42,000원", "address": "경기도 수원시 권선구 매송고색로 634-26 1층", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "11:00", "close": "21:00", "break": "15:00-17:00", "closed": [1]}, "note": "500도 화덕 생선구이. 갈치는 구이 말고 '순살' 조림 (월요일 휴무)", "rating": 4.6, "ratingCount": 4, "reviewNote": null, "verified": true, "verifyNote": "다이닝코드 2025-08 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=KpVYuIw05yUg", "checkedAt": "2026-10-17"}, {"id": "olive1999", "category": "western", "name": "올리브 1999", "menu": "뼈등심 돈까스 23,000원 · 감바스 22,000원 · 상하이크림 파스타 20,000원", "address": "경기도 수원시 영통구 센트럴파크로127번길 80-16 (예담하우스)", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:00", "close": "21:00", "note": "22:00까지라는 후기도 있어요"}, "note": "와이프 최애 리스트 그 집! 광교카페거리 오래된 양식집", "rating": 4.8, "ratingCount": 10, "reviewNote": "감바스·명란크림파스타 호평, 돈까스는 느끼할 수 있음", "verified": false, "verifyNote": "주소·메뉴는 다이닝코드·폴레에서 확인, '영업 중' 표시와 연도 있는 최근 후기는 못 찾음", "source": "https://www.diningcode.com/profile.php?rid=THKhdN9gBIEJ", "checkedAt": "2026-10-17"}, {"id": "forkner-ansan", "category": "western", "name": "포크너 (안산 중앙동 본점)", "menu": "시그니처 등심 스테이크(350g) 59,000원 · 살치살 49,000원 · 감자뇨끼 23,000원", "address": "경기도 안산시 단원구 예술대학로 11 해남빌딩 1층", "area": "안산", "lat": null, "lng": null, "price": 3, "priceText": "1인 3~4만원", "hours": {"open": "11:00", "close": "22:00", "break": "15:30-17:00", "note": "브레이크는 일부 요일만"}, "note": "와이프 최애 리스트 그 집! 수원에선 차로 30분 넘게 걸려요, 주차 어려움", "rating": 4.6, "ratingCount": 17, "reviewNote": "스테이크·감자뇨끼·파스타 호평", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=DfSOCdJ2jbso", "checkedAt": "2026-10-17"}, {"id": "forkner-grandcity", "category": "western", "name": "포크너 그랑시티자이점", "menu": "클래식 까르보나라 17,000원 · 쉬림프 오일 파스타 19,000원", "address": "경기도 안산시 상록구 해양1로 199, 206·207호", "area": "안산", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:00", "close": "22:00", "break": "15:30-17:00"}, "note": "포크너 2호점, 수변 통창 뷰", "rating": 4.5, "ratingCount": 6, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=6vCbuR1qGewm", "checkedAt": "2026-10-17"}, {"id": "outback-starfield", "category": "western", "name": "아웃백스테이크하우스 수원스타필드점", "menu": "투움바 파스타 · 스테이크류 (토마호크 100g 30,000원)", "address": "경기도 수원시 장안구 수성로 175 스타필드 수원 7층", "area": "장안", "lat": null, "lng": null, "price": 3, "priceText": "1인 3만원~", "hours": {"open": "10:30", "close": "22:00", "weekend": {"open": "10:00", "close": "22:00"}}, "note": "아웃백 스타일 그대로, 스타필드 무료주차", "rating": 4.5, "ratingCount": 18, "reviewNote": "맛 4.7점", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-11 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=BL57NXVdCpeM", "checkedAt": "2026-10-17"}, {"id": "hwanghwachon", "category": "chinese", "name": "행화촌", "menu": "짜장면 8,000원 · 탕수육(中) 25,000원 · 깐풍기 10,000원('만원의 행복' 메뉴, 블로그 기준)", "address": "경기도 수원시 팔달구 권광로180번길 42-7", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "21:30", "closed": [0]}, "note": "나혜석거리 중식당, 직원 친절하다는 평", "rating": 4.6, "ratingCount": 11, "reviewNote": "짜장·짬뽕·팔보채·탕수육 무난하거나 맛있다는 평", "verified": false, "verifyNote": "주소·메뉴·영업시간은 확인, '영업 중' 표시는 못 봄", "source": "https://www.diningcode.com/profile.php?rid=7bdTW4hNHZsi", "checkedAt": "2026-10-17"}, {"id": "daesungjang", "category": "chinese", "name": "대성장", "menu": "깐풍기(중) 30,000원 · 유니짜장 8,000원 · 짬뽕 10,000원", "address": "경기도 수원시 영통구 신원로 169 1층", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "10:30", "close": "22:00", "note": "라스트오더 20:50"}, "note": "간짜장 '진짜 미쳤다'는 리뷰가 있는 집", "rating": 4.2, "ratingCount": 5, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-06 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=v8QZEyXGGLAi", "checkedAt": "2026-10-17"}, {"id": "jilinsung-ingye", "category": "chinese", "name": "길림성 인계점", "menu": "유니짜장 9,000원 · 해물짬뽕 10,000원 · 깐풍육 35,000원(블로그 기준)", "address": "경기도 수원시 팔달구 권광로 277", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "11:00", "close": "20:40"}, "note": "짜장·짬뽕 호평, 연중무휴", "rating": 4.1, "ratingCount": 3, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 2025-10 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=TjDzWbDNpolY", "checkedAt": "2026-10-17"}, {"id": "torikichi-gwanggyo", "category": "izakaya", "name": "토리키치 광교호수공원점", "menu": "인기 야키 6종 세트 24,000원 · 닭목살꼬치 7,800원 · 2인세트 36,000원", "address": "경기도 수원시 영통구 법조로 38 판매시설동 B26호", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원 안팎", "hours": {"open": "17:00", "close": "01:00", "weekend": {"open": "16:00", "close": "01:00"}}, "note": "닭목살·닭다리·츠쿠네 등 닭꼬치 종류 많음, 문어볼(타코볼)도 있음", "rating": 4.7, "ratingCount": 5, "reviewNote": "꼬치구이가 좋다는 평", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시 (연도 있는 최신 리뷰 2024-12)", "source": "https://www.diningcode.com/profile.php?rid=Uvc6UXnsekSD", "checkedAt": "2026-10-17"}, {"id": "moromikushi-gwanggyo", "category": "izakaya", "name": "모로미쿠시 광교카페거리점", "menu": "모듬 야끼토리 5종 18,600원 · 소고기타다끼 25,000원", "address": "경기도 수원시 영통구 센트럴파크로127번길 48 1층", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "17:30", "close": "01:00"}, "note": "올리브1999랑 같은 광교카페거리", "rating": 5.0, "ratingCount": 3, "reviewNote": "안주 대부분 맛있다는 평", "verified": true, "verifyNote": "다이닝코드 오늘 영업시간 표시 (최근 후기 날짜는 연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=S4BSizglvuwU", "checkedAt": "2026-10-17"}, {"id": "hanamato-gwanggyo", "category": "izakaya", "name": "하나마토 광교점", "menu": "숯불 야끼토리 5종 13,000원 · 모츠나베 18,000원", "address": "경기도 수원시 영통구 도청로18번길 26 1층 140·141호", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "17:30", "close": "02:00"}, "note": "분위기 대비 저렴하다는 평", "rating": 5.0, "ratingCount": 2, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 2025-11 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=tLfZkwgSCHyr", "checkedAt": "2026-10-17"}, {"id": "lesaigon-lottemall", "category": "asian", "name": "르사이공 롯데몰수원점", "menu": "소고기쌀국수 M 13,500원 · 분짜 16,000원", "address": "경기도 수원시 권선구 세화로 134 (롯데몰 수원)", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:30", "close": "22:00"}, "note": "수원역 롯데몰(타임빌라스) 안이라 주차·접근 편함", "rating": 4.3, "ratingCount": 14, "reviewNote": "맛 4.7점, '좋음' 86%", "verified": true, "verifyNote": "다이닝코드 2025-12 리뷰 확인, 오늘 영업시간 표시", "source": "https://www.diningcode.com/profile.php?rid=RxMKbJPjOlIh", "checkedAt": "2026-10-17"}, {"id": "quananhdao", "category": "asian", "name": "콴안다오 타임빌라스 수원", "menu": "퍼보 13,000원 · 호띠우 14,000원 · 퍼싸오 15,000원", "address": "경기도 수원시 권선구 세화로 134 3층", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:30", "close": "22:00"}, "note": "쌀국수는 무난, 다른 베트남 메뉴가 호평", "rating": 3.9, "ratingCount": 9, "reviewNote": "맛 4.3점", "verified": true, "verifyNote": "다이닝코드 오늘 영업 표시 (최근 후기 날짜는 연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=Wcv7Ds7LJjq8", "checkedAt": "2026-10-17"}, {"id": "kungnyau", "category": "asian", "name": "꿍냐우", "menu": "소고기 쌀국수 11,900원 · 분짜 14,500원 · 반쎄오 19,500원", "address": "경기도 수원시 영통구 광교중앙로25번길 77 1층", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:30", "close": "21:00", "break": "15:00-17:00"}, "note": "아주대 근처, 가격 대비 맛과 퀄리티가 괜찮다는 평", "rating": 4.3, "ratingCount": 4, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 오늘 영업시간 표시 (연도 있는 최신 리뷰 2024-08)", "source": "https://www.diningcode.com/profile.php?rid=57amkRmGHEUl", "checkedAt": "2026-10-17"}, {"id": "koren", "category": "asian", "name": "꼬렌", "menu": "차돌양지쌀국수 12,500원 · 분짜 16,000원 · 반쎄오 18,000원", "address": "경기도 수원시 장안구 정자천로173번길 11-10 뱅뱅프라자 2층", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "11:00", "close": "21:00", "break": "14:30-16:00", "closed": [4], "note": "목요일 휴무는 블로그 기준"}, "note": "쌀국수가 '현지맛 그대로'라는 평", "rating": 5.0, "ratingCount": 1, "reviewNote": "맛 평가 '좋음' 100%", "verified": true, "verifyNote": "다이닝코드 오늘 영업 상태 표시 (최근 후기 날짜는 연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=XesIGb4P0y34", "checkedAt": "2026-10-17"}, {"id": "hwangbone", "category": "bunsik", "name": "황보네분식", "menu": "황보네 김밥 2,000원 · 떡볶이 1인분 2,500원", "address": "경기도 수원시 권선구 권광로 89", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 미만", "hours": {"open": "10:30", "close": "18:00", "closed": [0, 1], "note": "토요일은 16:00까지, 카드 결제 안 된다는 후기"}, "note": "싸고 맛있는 동네 분식", "rating": 4.5, "ratingCount": 3, "reviewNote": "맛·가격 5.0점", "verified": true, "verifyNote": "다이닝코드 2025-12 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=2dtTmJkJd0SN", "checkedAt": "2026-10-17"}, {"id": "bureobu", "category": "bunsik", "name": "불어부로뎅", "menu": "떡볶이 5,000원 · 모듬튀김 6,900원 · 꼬마김밥 4,000원", "address": "경기도 수원시 권선구 곡선로50번길 5-6 101호", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 미만", "hours": {"open": "11:30", "close": "23:00", "closed": [1]}, "note": "무가 들어간 부산식 떡볶이, 양념이 진함", "rating": 3.9, "ratingCount": 4, "reviewNote": "맛 평가 '좋음'과 '보통' 반반", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=HDnDwFAsTQXz", "checkedAt": "2026-10-17"}, {"id": "39gimtteoksun", "category": "bunsik", "name": "39김떡순", "menu": "국물떡볶이 4,500원 · 찰순대 5,000원 · 모듬튀김 4,800원", "address": "경기도 수원시 권선구 금호로 63-14 1층 3호", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 미만", "hours": {"open": "11:00", "close": "23:00", "closed": [2]}, "note": "후추맛 강한 국물떡볶이", "rating": 4.0, "ratingCount": 1, "reviewNote": null, "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-06 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=mRNR7mYTe4Tl", "checkedAt": "2026-10-17"}, {"id": "wadong", "category": "gukbap", "name": "와동감자탕", "menu": "사골 뼈해장국 9,900원 · 순살 해장국 10,900원 · 우거지 감자탕(소) 36,000원", "address": "경기도 수원시 권선구 금호로 138 1층", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 안팎", "hours": {"open": "09:00", "close": "21:00", "closed": [2]}, "note": "덜 자극적인 사골 해장국", "rating": 4.6, "ratingCount": 8, "reviewNote": "맛 4.8점, '좋음' 88%", "verified": true, "verifyNote": "다이닝코드 오늘 영업 상태 표시, 2025-05 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=0HISspbS3ro0", "checkedAt": "2026-10-17"}, {"id": "tapgol", "category": "gukbap", "name": "탑골순대국", "menu": "순대국 9,000원 · 선지해장국 9,000원 · 뼈다귀해장국 10,000원", "address": "경기도 수원시 권선구 금호로195번길 2", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 안팎", "hours": {"open": "09:00", "close": "22:00"}, "note": "연중무휴 순대국집", "rating": 4.1, "ratingCount": 5, "reviewNote": "맛 4.6점, '좋음' 80%", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시 (연도 있는 최신 리뷰 2023-06)", "source": "https://www.diningcode.com/profile.php?rid=rNAH9gweKf0u", "checkedAt": "2026-10-17"}, {"id": "taepyung", "category": "gukbap", "name": "태평생고기김치찌개", "menu": "생고기 김치찌개 10,000원 · 생고기 두루치기(2인) 24,000원", "address": "경기도 수원시 장안구 금당로 67", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "22:00", "break": "15:00-17:00", "closed": [0], "note": "일요일 휴무는 블로그 기준"}, "note": "아빠표 김치찌개 생각날 때", "rating": 5.0, "ratingCount": 1, "reviewNote": "생고기 김치찌개가 메인이라는 평", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-11 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=Qfz2nTYhC4Ta", "checkedAt": "2026-10-17"}, {"id": "parkgane", "category": "gukbap", "name": "박가네통돼지김치찌개", "menu": "돼지김치찌개 11,000원 · 김치찌개+제육 15,500원", "address": "경기도 수원시 권선구 경수대로 408 1층 107호", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "22:00", "break": "15:00-17:00", "note": "일요일은 21:00까지"}, "note": "앞다리살 듬뿍 김치찌개", "rating": 4.0, "ratingCount": 1, "reviewNote": "김치찌개 맛있고 제육은 보통이라는 평", "verified": true, "verifyNote": "다이닝코드 오늘 영업 상태 표시, 2025-11 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=oBZmju7p2Rda", "checkedAt": "2026-10-17"}, {"id": "gyedong", "category": "samgyup", "name": "계동돼지", "menu": "계동 숙성 통삼겹살 15,000원 · 제주2인세트 450g 49,000원", "address": "경기도 수원시 팔달구 인계로124번길 49 1층", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "17:00", "close": "01:00"}, "note": "직원이 다 구워줘서 편함", "rating": 4.6, "ratingCount": 7, "reviewNote": "맛 4.7점", "verified": true, "verifyNote": "다이닝코드 오늘 영업시간 표시 (최근 후기 날짜는 연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=RJNRplL8lC7V", "checkedAt": "2026-10-17"}, {"id": "samgyupsikdang", "category": "samgyup", "name": "삼겹식당", "menu": "생삼겹살 180g 14,000원 · 생목살 180g 14,000원", "address": "경기도 수원시 영통구 영통로154번길 74 사국빌딩 1층 B01호", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원 안팎", "hours": {"open": "14:00", "close": "23:00", "weekend": {"open": "12:00", "close": "23:00"}}, "note": "망포역 근처, 반찬 다양", "rating": 4.4, "ratingCount": 4, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-09 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=BSpuqSgMLyu6", "checkedAt": "2026-10-17"}, {"id": "samhwan", "category": "samgyup", "name": "삼환축산 수원영통점", "menu": "숙성생삼겹 100g 4,990원 · 숙성생목살 100g 4,990원", "address": "경기도 수원시 영통구 청명남로 8 원창빌딩 1층", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "16:00", "close": "23:00", "weekend": {"open": "12:00", "close": "23:00"}}, "note": "정육식당 가성비, 목살이 부드럽다는 평", "rating": 5.0, "ratingCount": 4, "reviewNote": "맛 5.0점", "verified": true, "verifyNote": "다이닝코드 오늘 영업시간 표시, 2025-11 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=mtjDKqtEaxLS", "checkedAt": "2026-10-17"}, {"id": "gogirang", "category": "samgyup", "name": "고기랑", "menu": "한돈 생삼겹살 16,000원 · 수제돼지갈비 19,000원", "address": "경기도 수원시 팔달구 권광로196번길 49", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원 안팎", "hours": {"open": "11:00", "close": "23:00", "break": "15:00-16:30"}, "note": "평가 23명, 숙성 고기 풍미가 진하다는 평", "rating": 3.9, "ratingCount": 23, "reviewNote": "맛 4.8점, '좋음' 91%", "verified": true, "verifyNote": "다이닝코드 오늘 영업 상태 표시, 2025-10 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=5btFQbLL5Mp2", "checkedAt": "2026-10-17"}, {"id": "leeseobang", "category": "jokbal", "name": "이서방왕족발", "menu": "족발세트+수제막국수 38,000원 · 굴보쌈 51,000원", "address": "경기도 수원시 권선구 세권로 134 1층", "area": "권선", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원 안팎", "hours": {"open": "11:00", "close": "22:30", "break": "15:00-15:30"}, "note": "단골이 많다는 동네 족발집", "rating": 4.7, "ratingCount": 2, "reviewNote": "맛 5.0점", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시 (연도 있는 최신 리뷰 2024-07)", "source": "https://www.diningcode.com/profile.php?rid=XpQzJIbweRVq", "checkedAt": "2026-10-17"}, {"id": "myungin", "category": "jokbal", "name": "명인족발", "menu": "족발(대) 45,000원 · 반반세트 50,000원 · 쟁반막국수 15,000원", "address": "경기도 수원시 권선구 매송고색로 723 남영빌딩 102호", "area": "권선", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원대", "hours": {"open": "15:00", "close": "00:00"}, "note": "잡내 없고 부드럽다는 후기", "rating": null, "ratingCount": null, "reviewNote": "블로그 후기 위주", "verified": true, "verifyNote": "다이닝코드 오늘 영업시간 표시, 2025-12 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=f0ypYCbNHK1V", "checkedAt": "2026-10-17"}, {"id": "yeonjeo", "category": "jokbal", "name": "연저보쌈", "menu": "매운족발 25,000원 · 보쌈막국수 16,000원", "address": "경기도 수원시 권선구 권선로537번길 4", "area": "권선", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원 안팎", "hours": {"open": "11:30", "close": "01:00", "note": "2024년 블로그엔 월요일 휴무로 나와 있어요"}, "note": "보쌈 조리법이 독특하고 양이 많다는 평", "rating": null, "ratingCount": null, "reviewNote": "블로그 후기 위주", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-11 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=z2vUMlTCUNvA", "checkedAt": "2026-10-17"}, {"id": "dasun", "category": "noodle", "name": "다선칼국수 본점", "menu": "칼낙지(2인~) 16,000원 · 접시수육 15,000원 · 만두국 12,000원", "address": "경기도 수원시 팔달구 향교로 48 1층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:30", "close": "22:00", "break": "15:30-17:00"}, "note": "수원역 근처, 평가 19명", "rating": 4.6, "ratingCount": 19, "reviewNote": "맛 4.7점, '좋음' 84%", "verified": true, "verifyNote": "다이닝코드 오늘 영업 상태 표시 (최근 후기 날짜는 연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=6feUX50TuXMc", "checkedAt": "2026-10-17"}, {"id": "paldang", "category": "noodle", "name": "팔당냉면", "menu": "비빔냉면+숯불고기 12,000원 · 뼈곰탕 11,000원", "address": "경기도 수원시 장안구 대평로 140 2층", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:30", "close": "20:30"}, "note": "냉면 + 숯불고기 세트", "rating": 4.6, "ratingCount": 6, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 2025-08 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=63RC5qm6hIxQ", "checkedAt": "2026-10-17"}, {"id": "gukmin", "category": "noodle", "name": "국민냉면", "menu": "바지락칼국수 10,000원 · 비빔냉면 9,000원 · 녹두빈대떡 9,000원", "address": "경기도 수원시 팔달구 수원천로258번길 10-1", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 안팎", "hours": {"open": "09:30", "close": "19:30"}, "note": "칼국수 국물과 빈대떡 호평", "rating": 4.2, "ratingCount": 5, "reviewNote": "맛 4.6점", "verified": true, "verifyNote": "다이닝코드 2025-07 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=15JZzAGOZoo8", "checkedAt": "2026-10-17"}, {"id": "tanghwa", "category": "mala", "name": "탕화쿵푸마라탕 본점", "menu": "마라탕(1인) 13,000원 · 꿔바로우(소) 12,000원", "address": "경기도 수원시 팔달구 고매로 1 엘리시아 104·105호", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "10:00", "close": "01:00"}, "note": "다른 지점보다 마라 맛이 강하다는 평", "rating": 4.2, "ratingCount": 19, "reviewNote": "맛 4.7점, '좋음' 84%", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-11 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=FpEQGriaMIhN", "checkedAt": "2026-10-17"}, {"id": "sacheonhot", "category": "mala", "name": "사천핫마라샹궈마라탕", "menu": "마라탕 100g 1,800원 · 마라샹궈 100g 3,000원 · 꿔바로우(소) 12,000원", "address": "경기도 수원시 팔달구 장다리로 250 구산빌딩 1층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "11:30", "close": "22:30", "note": "일요일은 16:00부터"}, "note": "진한 마라샹궈가 늘 실패없다는 후기", "rating": null, "ratingCount": null, "reviewNote": "블로그 후기 위주", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-08 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=ZO4sXjbNK0q7", "checkedAt": "2026-10-17"}, {"id": "hanjungmala", "category": "mala", "name": "한중마라 수원점", "menu": "소고기마라탕(1~2인) 17,000원 · 소고기마라샹궈 23,000원", "address": "경기도 수원시 권선구 삼천병마로 1588 104호", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원대", "hours": {"open": "11:30", "close": "22:00", "break": "14:30-15:30", "note": "매달 2·4째 토요일 휴무(블로그)"}, "note": "호매실 쪽이라 조금 멀어요", "rating": 4.5, "ratingCount": 1, "reviewNote": "맛 5.0점", "verified": true, "verifyNote": "다이닝코드 오늘 휴무 표시(폐업 아님), 2025-07 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=gj2V5qLmBTyp", "checkedAt": "2026-10-17"}, {"id": "bangbang", "category": "donkatsu", "name": "뱅뱅돈까스 수원시청직영점", "menu": "뱅뱅돈까스 11,900원 · 옛날돈까스 9,900원", "address": "경기도 수원시 권선구 세권로 175 1층", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "03:00", "closed": [2]}, "note": "새벽까지 하는 옛날 돈까스", "rating": 4.5, "ratingCount": 2, "reviewNote": "맛 5.0점", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-12 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=I2Tlmay0uP8K", "checkedAt": "2026-10-17"}, {"id": "donkatsuclub", "category": "donkatsu", "name": "돈까스클럽 북수원점", "menu": "왕돈까스 13,500원 · 큐브 스테이크 17,900원", "address": "경기도 수원시 장안구 경수대로1107번길 6", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:10", "close": "21:00", "break": "15:00-17:00", "closed": [1]}, "note": "양 많고 빨리 나옴, 무료주차", "rating": 3.9, "ratingCount": 16, "reviewNote": "맛 4.4점", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시", "source": "https://www.diningcode.com/profile.php?rid=AHRmye592Oux", "checkedAt": "2026-10-17"}, {"id": "donkatsubros", "category": "donkatsu", "name": "돈까스브로스 수원정자점", "menu": "브로스 돈까스 12,800원 · Double Sauce 치킨까스 13,800원", "address": "경기도 수원시 장안구 이목로 24-9 2층 203호", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "21:00", "break": "14:30-16:30", "note": "일요일은 14:30까지"}, "note": "두툼한 등심 + 수제 소스", "rating": null, "ratingCount": null, "reviewNote": "블로그 후기 위주", "verified": true, "verifyNote": "다이닝코드 오늘 영업 상태 표시, 2026-05 블로그 확인", "source": "https://www.diningcode.com/profile.php?rid=xwjq9cpqK8OS", "checkedAt": "2026-10-17"}, {"id": "itsumo", "category": "donkatsu", "name": "이츠모라멘 수원점", "menu": "돈코츠라멘 10,500원 · 카라이 돈코츠 12,000원 · 츠케멘 12,000원", "address": "경기도 수원시 팔달구 권광로180번길 45 1층 101호", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:30", "close": "20:00", "note": "블로그엔 화요일 휴무로 나와 있어요"}, "note": "진한 돈코츠 국물", "rating": 4.3, "ratingCount": 13, "reviewNote": "맛 4.7점, '좋음' 85%", "verified": true, "verifyNote": "다이닝코드 오늘 영업시간 표시, 2025-04 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=Axb4MZLNLafP", "checkedAt": "2026-10-17"}, {"id": "gtsburger", "category": "burger", "name": "GTS버거 본점", "menu": "블랙맘바 더블버거 14,500원 · 베이컨 더블버거 13,900원", "address": "경기도 수원시 영통구 매영로310번길 87 상가동 지하1층", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:30", "close": "21:00", "break": "15:00-16:00"}, "note": "양 많은 수제버거", "rating": 5.0, "ratingCount": 3, "reviewNote": "맛 평가 전원 '좋음'", "verified": true, "verifyNote": "다이닝코드 2025-08 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=2DITCsiitqxb", "checkedAt": "2026-10-17"}, {"id": "666burger", "category": "burger", "name": "666버거 본점", "menu": "갈릭붐 세트 13,000원 · 치즈인더트랩 세트 13,500원", "address": "경기도 수원시 영통구 매영로 112", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "00:00"}, "note": "자정까지 하는 수제버거", "rating": 4.2, "ratingCount": 8, "reviewNote": "맛 4.5점", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시 (연도 있는 최신 리뷰 2024-11)", "source": "https://www.diningcode.com/profile.php?rid=a8lBZbSkCspT", "checkedAt": "2026-10-17"}, {"id": "7377", "category": "burger", "name": "칠삼칠칠 본점", "menu": "할라피뇨버거 8,500원 · 해쉬브라운버거 9,000원", "address": "경기도 수원시 권선구 서둔로 166 청년1981동 1층", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 미만", "hours": {"open": "11:00", "close": "21:00", "closed": [1], "note": "블로그 기준, 20시 마감이라는 글도 있어요"}, "note": "재료 소진 시 일찍 닫음", "rating": 4.0, "ratingCount": 3, "reviewNote": "맛 5.0점", "verified": false, "verifyNote": "2025-10 블로그는 확인, 다이닝코드엔 영업시간 미표시", "source": "https://www.diningcode.com/profile.php?rid=2jQy22xfh63w", "checkedAt": "2026-10-17"}, {"id": "pizzaheol", "category": "burger", "name": "피자헐", "menu": "반반 피자 XL 16,900원 · 세트1 22,900원", "address": "경기도 수원시 장안구 율전로 105", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "12:00", "close": "23:00"}, "note": "불고기 피자 양념이 맛있다는 후기", "rating": null, "ratingCount": null, "reviewNote": "블로그 후기 위주", "verified": false, "verifyNote": "다이닝코드 '영업 중' 표시, 다만 최신 후기가 2024-11", "source": "https://www.diningcode.com/profile.php?rid=OyhiOt8JggOv", "checkedAt": "2026-10-17"}, {"id": "tacosanos-haenggung", "category": "mexican", "name": "타코사노스 행궁본점", "menu": "트레스 화이타(2인) 38,000원 · 뽈로 부리또 14,900원 · 스위트 콘 퀘사디아 15,900원", "address": "경기도 수원시 팔달구 행궁로 19 1층", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:30", "close": "21:00", "break": "15:30~17:00", "note": "라스트오더 20:00"}, "note": "행궁동 화이타·타코 전문점, 오픈 전 대기줄", "rating": 4.6, "ratingCount": 16, "reviewNote": "맛 4.8로 호평, 가격·응대는 보통 평 다수, 단체 주문 시 음식 지연", "verified": true, "verifyNote": "다이닝코드 주소·영업시간 표시(오늘 브레이크타임 표시), 2025-10-17 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=AUqU2BpSjI81", "checkedAt": "2026-10-17"}, {"id": "gamsung-taco-gwanggyo", "category": "mexican", "name": "감성타코 광교점", "menu": "감성 그릴드 파히타 47,800원 · 숏립 타코 12,800원 · 칠리라차 쉬림프 타코 11,800원", "address": "경기도 수원시 영통구 광교중앙로 145 지하1층", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:30", "close": "22:00", "break": "15:00~17:00", "weekend": {"open": "12:00", "close": "22:00"}, "note": "일요일 브레이크 16:00~17:00, 라스트오더 21:00"}, "note": "광교 앨리웨이 인근 파히타·타코 비스트로", "rating": 4.5, "ratingCount": 20, "reviewNote": "고기 다양·푸짐, 또띠아 리필 친절, 가격 대비 양은 아쉽다는 평, 간이 짠 편", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시(토 12:00~22:00), 최근 다이닝코드 리뷰는 2024-07", "source": "https://www.diningcode.com/profile.php?rid=qblAJaovrBKX", "checkedAt": "2026-10-17"}, {"id": "casa-de-taco-dongtan", "category": "mexican", "name": "카사데타코 동탄점", "menu": "카사 데 파히타 38,000원 · 비리아 타코 9,900원 · 비프브리또 12,000원", "address": "경기도 화성시 동탄구 동탄공원로3길 22-1 1동 1층", "area": "동탄", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:00", "close": "21:30", "break": "15:30~16:30", "note": "라스트오더 20:40"}, "note": "동탄 파히타·비리아 타코, 커플·패밀리 세트", "rating": 4.3, "ratingCount": 5, "reviewNote": "맛 5.0 호평, 응대 친절, 위생 보통, 주차 어려움", "verified": true, "verifyNote": "다이닝코드 '영업 전'(오늘 11:00 영업) 표시, 2025-12-15 리뷰 및 2026년 추정 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=XoUbCbZb97JB", "checkedAt": "2026-10-17"}, {"id": "bears-taco-seongbok", "category": "mexican", "name": "베어스타코 용인성복점", "menu": "치킨타코 2PCS 8,900원 · 비프부리또 11,900원 · 알 파스토르 부리또 13,900원", "address": "경기도 용인시 수지구 성복2로 51 비동 101호", "area": "수지", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:30", "close": "22:00"}, "note": "가성비 타코·부리또 체인, 배달 가능", "rating": 5.0, "ratingCount": 3, "reviewNote": "가성비·응대·위생 만점, 부리또 양 푸짐, 타코는 살짝 아쉽다는 평", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025-08-29 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=KwgXBXP8btOM", "checkedAt": "2026-10-17"}, {"id": "thai-terrace-yeongtong", "category": "thai", "name": "타이테라스", "menu": "푸팟퐁커리 28,500원 · 똠얌꿍 21,500원 · 팟타이 13,900원", "address": "경기도 수원시 영통구 권선로882번길 108-19 101호", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원대", "hours": {"open": "11:00", "close": "21:00", "break": "15:30~16:30", "note": "라스트오더 20:10"}, "note": "공원 뷰 이국적 분위기의 태국 요리 전문점", "rating": 4.5, "ratingCount": 18, "reviewNote": "똠얌쌀국수·푸팟퐁커리·쏨땀 호평, 친절한 응대; 가성비는 보통", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업시간 확인, 폐업 표시 없음, 2025-11·2026-03 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=Z3tRZ8cmKzEd", "checkedAt": "2026-10-17"}, {"id": "yeonha-pochana-haenggung", "category": "thai", "name": "연하포차나", "menu": "족발덮밥 13,000원 · 드렁큰누들 13,000원 · 똠양꿍라면 12,000원", "address": "경기 수원시 팔달구 화서문로32번길 25-6 1층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:30", "close": "20:00", "break": "16:00~17:00", "closed": [1], "note": "월요일 휴무, 라스트오더 19:20"}, "note": "행궁동의 작은 태국 가정식 식당(팟타이는 없음)", "rating": 4.8, "ratingCount": 4, "reviewNote": "맛·양·가격 만족, 매장 좁고 주차 어려움, 대기 있을 수 있음", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업시간 확인, 영업 중 표시(라스트오더 안내), 2025-11 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=IX5fuYYOL0rk", "checkedAt": "2026-10-17"}, {"id": "gate-nine-dongtan", "category": "thai", "name": "게이트나인 동탄점", "menu": "똠양꿍 18,000원 · 팟타이 17,000원 · 뿌팟봉커리 33,000원", "address": "경기도 화성시 동탄구 동탄역로 160 지하1층", "area": "동탄", "lat": null, "lng": null, "price": 2, "priceText": "1인 2만원대", "hours": {"open": "10:00", "close": "20:00", "note": "금~일 20:30까지"}, "note": "동탄역 인근 태국·동남아 요리, 세트 메뉴 가성비", "rating": 4.4, "ratingCount": 4, "reviewNote": "세트·새우튀김·볶음밥 호평, 친절; 팟타이 짜다는 의견 있음", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업시간 확인, 영업 중 배지, 2025-10 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=MAMOLaQ1Jbkz", "checkedAt": "2026-10-17"}, {"id": "naan-ingye", "category": "indian", "name": "난", "menu": "버터치킨 13,000원 · 치킨티카 17,000원 · 커플세트 44,500원", "address": "경기도 수원시 팔달구 인계로166번길 45, 2층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "22:00", "note": "연중무휴, 라스트오더 21:30"}, "note": "인계동 넓은 인도풍 인테리어의 커리·난 전문점", "rating": 4.5, "ratingCount": 14, "reviewNote": "커리·난·런치세트 가성비 호평(맛 4.9), 위생 평가는 보통", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업시간 확인, 영업 중 배지, 최근 리뷰(2026 추정) 확인", "source": "https://www.diningcode.com/profile.php?rid=JnxPTV0vSQKl", "checkedAt": "2026-10-17"}, {"id": "agra-starfield-suwon", "category": "indian", "name": "아그라 스타필드수원점", "menu": "프리미엄 싱글 세트 29,800원 · 프리미엄 커플 세트 59,600원", "address": "경기도 수원시 장안구 수성로 175, 스타필드 수원점 7층", "area": "장안", "lat": null, "lng": null, "price": 2, "priceText": "1인 3만원 안팎", "hours": {"open": "10:00", "close": "22:00", "note": "라스트오더 21:30"}, "note": "스타필드 수원 내 인도 커리 세트(난·밥·음료 무제한)", "rating": 4.6, "ratingCount": 10, "reviewNote": "맛·친절 호평, 세트 푸짐; 가격 높고 주말 대기", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업시간 확인, 폐업 표시 없음, 2025-12 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=p5vrGZ4dU7ry", "checkedAt": "2026-10-17"}, {"id": "om-restaurant-gwanggyo", "category": "indian", "name": "옴 레스토랑 광교점", "menu": "탈리세트 14,500원 · 오늘의 미니 런치 세트 19,500원 · 난 3,500원", "address": "경기도 수원시 영통구 센트럴타운로 85 아브뉴프랑 2층 라온존 B223호", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "22:00"}, "note": "광교 아브뉴프랑 내 인도·네팔 커리 레스토랑", "rating": 4.7, "ratingCount": 7, "reviewNote": "맛·위생 5.0, 양 넉넉·향신료 순함; 탄두리 퍽퍽하다는 의견", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업시간 확인, 영업 중 배지, 2026 추정 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=a6k1VanO8BHJ", "checkedAt": "2026-10-17"}, {"id": "oto-gimbap-suwon-cityhall", "category": "gimbap", "name": "오토김밥 수원시청점", "menu": "오토 김밥 6,000원 · 고추냉이 김밥 6,000원 · 닭강정(소) 9,000원", "address": "경기도 수원시 팔달구 권광로 138 1층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 이하", "hours": {"open": "08:00", "close": "19:50", "note": "월~금 08:00-19:50, 일 08:00-19:00, 토요일 시간 미확인"}, "note": "고추냉이 김밥 등 시그니처 김밥과 닭강정", "rating": 4.8, "ratingCount": 9, "reviewNote": "5점 7건, 위생 5.0, 점심 방문 많음", "verified": true, "verifyNote": "다이닝코드 프로필 주소 확인, 2026년 9월·7월 리뷰 및 2025년 11월 리뷰 확인, 폐업 표시 없음", "source": "https://www.diningcode.com/profile.php?rid=2WbhcJ5WfLtR", "checkedAt": "2026-10-17"}, {"id": "kkang-udong-yeongtong", "category": "gimbap", "name": "깡우동 영통본점", "menu": "우동 9,000원 · 어묵 우동 10,000원 · 고기만두(8개) 8,000원", "address": "경기도 수원시 영통구 청명남로28번길 2 아이텐텐빌딩 1층", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "03:00", "note": "월~토 11:00-03:00(LO 02:00), 일요일은 17:00-01:00"}, "note": "쫄깃한 얇은 면과 국물의 우동, 늦게까지 영업", "rating": 4.3, "ratingCount": 28, "reviewNote": "맛 4.5·가격 4.3, 면발·국물 호평, 술자리 방문도 많음", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 2025년 11월 및 2026년 1월 리뷰 확인, 주소 확인", "source": "https://www.diningcode.com/profile.php?rid=TkdYxNHnMeMC", "checkedAt": "2026-10-17"}, {"id": "ppomine-haenggung", "category": "gimbap", "name": "뽀미네", "menu": "묵은지참치왕김밥 5,500원 · 냄비라면 6,000원 · 만두냄비라면 7,000원", "address": "경기도 수원시 팔달구 화서문로45번길 12-12 지하1층 101호", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 이하", "hours": {"open": "11:00", "close": "21:00", "closed": [3], "note": "라스트오더 20:00"}, "note": "행궁동 왕김밥과 냄비라면, 멸치육수 셀프바", "rating": 5.0, "ratingCount": 3, "reviewNote": "김밥이 크고 속이 알참, 묵은지참치김밥 추천", "verified": true, "verifyNote": "다이닝코드 주소·영업시간 확인, 2025년 10월·9월 리뷰 확인, 폐업 표시 없음", "source": "https://www.diningcode.com/profile.php?rid=EpAgAL4nue6s", "checkedAt": "2026-10-17"}, {"id": "boyoung-mandu-main", "category": "mandu", "name": "보영만두 본점", "menu": "고기군만두 9,000원 · 쫄면 9,000원 · 고기만두(찐만두) 8,000원", "address": "경기도 수원시 장안구 팔달로 271", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:00", "close": "01:00", "note": "라스트오더 00:00, 휴무일 표기가 불명확해 방문 전 확인 필요"}, "note": "수원 대표 군만두+쫄면 노포 본점", "rating": 4.2, "ratingCount": 70, "reviewNote": "맛 4.5, 대기줄 길지만 회전 빠름, 주차 불가", "verified": true, "verifyNote": "다이닝코드 '영업 중' 표시, 최근 며칠 전 리뷰 및 9월 30일 리뷰 확인, 주소 확인", "source": "https://www.diningcode.com/profile.php?rid=qiiPwhoYeuEZ", "checkedAt": "2026-10-17"}, {"id": "yeonmil-haenggung", "category": "mandu", "name": "연밀", "menu": "고기육즙만두 12,000원 · 새우육즙만두 13,000원 · 고수물만두 10,000원", "address": "경기도 수원시 팔달구 창룡대로8번길 10, 1층", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 1~2만원", "hours": {"open": "11:30", "close": "21:00", "break": "15:30~16:10", "closed": [1, 2]}, "note": "행궁동 중국식 육즙만두·빙화만두 전문점", "rating": 4.4, "ratingCount": 59, "reviewNote": "육즙 가득한 소 호평, 주말 저녁 웨이팅, 주차 불가", "verified": true, "verifyNote": "다이닝코드 주소·영업시간 확인, 2026년 3월 리뷰 및 2026년 9월 블로그 후기 확인, 폐업 표시 없음", "source": "https://www.diningcode.com/profile.php?rid=xw73TBV7VJN1", "checkedAt": "2026-10-17"}, {"id": "gaeseong-son-mandu-worldcup", "category": "mandu", "name": "개성손만두", "menu": "만두전골 13,000원 · 손(찐)만두 12,000원", "address": "경기도 수원시 팔달구 월드컵로 319", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:00", "close": "21:00"}, "note": "푸짐한 손만두와 만두전골, 무료주차", "rating": 4.5, "ratingCount": 4, "reviewNote": "양 푸짐·가성비 좋음, 식사시간 주차장 혼잡", "verified": true, "verifyNote": "다이닝코드 주소·영업시간 확인, 2025년 12월 30일 리뷰 확인, 폐업 표시 없음", "source": "https://www.diningcode.com/profile.php?rid=jH332Id9rmL7", "checkedAt": "2026-10-17"}, {"id": "mister-ojingeo-suwonyeok", "category": "hoe", "name": "미스터오징어", "menu": "모듬회(소) 35,000원 · 생새우회(소) 38,000원", "address": "경기도 수원시 팔달구 향교로 40", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "14:00", "close": "02:00", "note": "금·토 03:00까지, 연중무휴 태그"}, "note": "수원역 앞 오징어회·생새우회 가성비 횟집, 셀프바", "rating": 4.2, "ratingCount": 9, "reviewNote": "가성비 좋다는 평 다수, 늦은 시간 오징어회 품절 가능", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업중 표시 확인, 2025-11 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=nipHVDS8VouA", "checkedAt": "2026-10-17"}, {"id": "hoetteulnyeok-suwonyeok", "category": "hoe", "name": "회뜰녘", "menu": "생새우회+구이 반반 55,000원 · 활어회 모듬(소) 39,000원", "address": "경기도 수원시 팔달구 향교로 27-1 리오빌딩 101호", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "10:30", "close": "03:00", "weekend": {"open": "10:30", "close": "05:00"}, "note": "금·토 05:00까지, 점심 회정식 10:30~15:00"}, "note": "수원역 새벽까지 여는 횟집·조개구이, 개별룸·회정식", "rating": 4.6, "ratingCount": 7, "reviewNote": "맛 4.1·위생 3.0, 최근 리뷰에 날파리 지적", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업중 표시 확인, 2026-09 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=BAPNuFvX0ZFp", "checkedAt": "2026-10-17"}, {"id": "imone-jogaegui-ingye", "category": "hoe", "name": "이모네 조개구이", "menu": "조개구이(대) 60,000원 · 대하구이 50,000원", "address": "경기도 수원시 팔달구 인계로124번길 49 덕원빌딩", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "16:00", "close": "02:00", "note": "월요일 00:00 마감"}, "note": "인계동 연탄불 조개구이·조개찜, 야장·셀프바", "rating": 4.0, "ratingCount": 5, "reviewNote": "술모임·회식용 서민적 분위기", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업중 표시 확인, 2025-10·2025-12 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=qoFr3u1mhcjB", "checkedAt": "2026-10-17"}, {"id": "ttaengine-sogopchang-yeongtong", "category": "gopchang", "name": "땡이네소곱창", "menu": "황소곱창 28,000원 · 황소대창 28,000원", "address": "경기도 수원시 영통구 영통로213번길 16", "area": "영통", "lat": null, "lng": null, "price": 3, "priceText": "1인 3만원 이상", "hours": {"open": "16:00", "close": "22:30", "closed": [0], "note": "평일 기준, 라스트오더 21:30. 토요일 영업 여부 불확실(페이지상 10/17 토 휴무)"}, "note": "망포역 인근 웨이팅 있는 소곱창 전문점", "rating": 4.8, "ratingCount": 34, "reviewNote": "맛·응대 4.7, 대기 길다는 평", "verified": true, "verifyNote": "다이닝코드 프로필 주소 확인, 폐업 표시 없음, 2025-12·2026 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=lhiUWN1ur0Ep", "checkedAt": "2026-10-17"}, {"id": "jeongcheol-hwangso-gopchang-mangpo", "category": "gopchang", "name": "정철황소곱창", "menu": "알곱창구이 27,000원 · 곱창구이 23,000원", "address": "경기도 수원시 영통구 영통로130번길 42", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "16:00", "close": "22:30", "closed": [0], "note": "라스트오더 21:30, 금요일 휴무 표기는 불확실"}, "note": "망포동 직원이 구워주는 알곱창 맛집, 한정수량", "rating": 4.5, "ratingCount": 10, "reviewNote": "알곱창 조기 품절 잦음, 주차장 없음", "verified": true, "verifyNote": "다이닝코드 프로필 주소 확인, 폐업 표시 없음, 2026 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=lS5EwS9yJBmA", "checkedAt": "2026-10-17"}, {"id": "hoengseong-hanwoo-gopchang-janganmun", "category": "gopchang", "name": "횡성한우곱창", "menu": "소곱창구이 23,000원 · B셋트(곱창+막창+대창) 66,000원", "address": "경기도 수원시 장안구 정조로 932", "area": "장안", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "16:00", "close": "00:00"}, "note": "장안문 인근 노포 한우 곱창·막창 구이", "rating": 5.0, "ratingCount": 3, "reviewNote": "평가 수 적음, 지역주민 노포", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업중 표시 확인, 2025-05 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=k8zAegMEqkHM", "checkedAt": "2026-10-17"}, {"id": "gyehwajeong-ingye", "category": "dakgalbi", "name": "계화정 수원인계점", "menu": "직화철판닭갈비 13,000원 · 계화치즈닭갈비 15,000원", "address": "경기도 수원시 팔달구 인계로138번길 22 1층 101호", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:30", "close": "23:00", "note": "라스트오더 22:20"}, "note": "인계동 철판·석쇠 직화 닭갈비, 지하주차 무료", "rating": 4.8, "ratingCount": 14, "reviewNote": "2026년 리뷰 다수, 셀프바·테라스", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업중 표시 확인, 2026-09 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=CCZh3BYcbncZ", "checkedAt": "2026-10-17"}, {"id": "sillim-chuncheonjip-suwonyeok", "category": "dakgalbi", "name": "신림춘천집 수원역점", "menu": "항아리숙성 닭갈비 15,000원 · 치즈닭갈비 17,000원", "address": "경기도 수원시 팔달구 향교로 48", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:30", "close": "22:00", "break": "15:00~17:00"}, "note": "수원역 철판 닭갈비, 쌈채소 셀프바", "rating": 4.4, "ratingCount": 30, "reviewNote": "1인 약 17,000~21,000원 후기, 주차 불가", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업중 표시 확인, 2026 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=5u1Jo2U4b4Aa", "checkedAt": "2026-10-17"}, {"id": "jeongtong-chuncheon-dakgalbi-hwaseo", "category": "dakgalbi", "name": "정통춘천닭갈비", "menu": "닭갈비 15,000원 · 치즈닭갈비 17,000원", "address": "경기도 수원시 팔달구 수성로157번길 5-9 1층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "21:50", "break": "15:00~16:30"}, "note": "화서역 인근 푸짐한 춘천식 닭갈비·막국수, 대형룸", "rating": 4.1, "ratingCount": 24, "reviewNote": "맛 4.6·가격 3.6, 가족외식 많음", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업중 표시 확인, 2026 리뷰 존재", "source": "https://www.diningcode.com/profile.php?rid=Ie6gTXaddl3j", "checkedAt": "2026-10-17"}, {"id": "kiiro-starfield-suwon", "category": "donburi", "name": "키이로 수원스타필드점", "menu": "키이로텐동 13,500원 · 스페셜텐동 17,900원", "address": "경기도 수원시 장안구 수성로 175 7층 7170호", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "22:00", "note": "스타필드 수원 7층, 브레이크타임·휴무 미표기"}, "note": "스타필드 수원 안 텐동 전문점, 김치·카레·마라 텐동 등 변형 메뉴", "rating": 4.4, "ratingCount": 12, "reviewNote": "튀김 바삭·양 많음, 주말 혼잡·기름진 편", "verified": true, "verifyNote": "다이닝코드 프로필 주소·영업 중 표시, 2025-12 및 2026-10 추정 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=uIQzbu0E0un5", "checkedAt": "2026-10-17"}, {"id": "just-tendon-haengridan", "category": "donburi", "name": "저스트텐동 행리단길점", "menu": "저스트텐동 13,900원 · 순살게장 텐동 16,900원", "address": "경기도 수원시 팔달구 신풍로 25 1층", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:30", "close": "20:00", "break": "15:00~17:00", "note": "라스트오더 19:30"}, "note": "행리단길 텐동 체인점, 게장 텐동·마제소바", "rating": 4.1, "ratingCount": 18, "reviewNote": "튀김 바삭·세트 가성비, 주차 어려움", "verified": true, "verifyNote": "다이닝코드 주소·영업시간, 폐업 표시 없음, 2025-08·09 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=A8qV62y3M0qy", "checkedAt": "2026-10-17"}, {"id": "miso-tendon-gwanggyo", "category": "donburi", "name": "미소텐동", "menu": "미소텐동 11,900원 · 아나고텐동 16,900원", "address": "경기도 수원시 영통구 도청로18번길 26 1층 165호", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "20:30", "break": "15:30~17:30", "closed": [2], "note": "화요일 휴무는 블로그 기준, 라스트오더 20:00"}, "note": "광교 텐동집, 식후 푸딩 무료 제공", "rating": 4.6, "ratingCount": 3, "reviewNote": "튀김 바삭·양 푸짐, 매장 작고 점심 붐빔", "verified": true, "verifyNote": "다이닝코드 주소·영업 중 식당 표시, 2025-06 리뷰 확인(평가 수 3명으로 적음)", "source": "https://www.diningcode.com/profile.php?rid=qQtxrRlI4RP1", "checkedAt": "2026-10-17"}, {"id": "yeongcheon-ingye", "category": "yukhoe", "name": "영천", "menu": "(점심)육회비빔밥 14,000원 · 한우물회 14,000원 · 육회 35,000원", "address": "경기도 수원시 팔달구 효원로291번길 35", "area": "팔달", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원 (점심 1만원대)", "hours": {"open": "11:00", "close": "22:00", "closed": [0]}, "note": "인계동 한우집, 점심 육회비빔밥·한우물회 인기", "rating": 5.0, "ratingCount": 10, "reviewNote": "육회비빔밥 신선·푸짐, 친절, 무료주차", "verified": true, "verifyNote": "다이닝코드 주소·영업 중 표시·일요일 휴무 확인, 리뷰 연도 미표기(9/28 최신)", "source": "https://www.diningcode.com/profile.php?rid=H08q0UmAfLhI", "checkedAt": "2026-10-17"}, {"id": "modori-yukhoe-ilwol", "category": "yukhoe", "name": "모도리육회 일월본점", "menu": "채썬육회 28,000원 · 뭉티기+채썬육회 39,000원", "address": "경기도 수원시 권선구 일월천로15번길 6-5 1층", "area": "권선", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "17:00", "close": "01:00", "closed": [0], "note": "라스트오더 00:30, 일요일 휴무는 블로그 기준"}, "note": "당일 도축 한우 뭉티기·육회 전문 술집", "rating": 5.0, "ratingCount": 3, "reviewNote": "신선한 뭉티기·육회, 분위기 좋은 술집", "verified": true, "verifyNote": "다이닝코드 주소·영업 중 표시 확인, 최신 리뷰 5/17(연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=zZDRa0QxoSwH", "checkedAt": "2026-10-17"}, {"id": "hwani-mungtigi-geumgok", "category": "yukhoe", "name": "환이네뭉티기", "menu": "육회 듬뿍 비빔밥 13,000원 · 육회(중) 200g 44,000원", "address": "경기도 수원시 권선구 금곡로118번길 54-6", "area": "권선", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~3만원", "hours": {"open": "11:00", "close": "22:00", "break": "14:00~16:00", "closed": [0], "note": "라스트오더 21:00"}, "note": "호매실 뭉티기·육회 전문, 점심 육회비빔밥", "rating": 4.4, "ratingCount": 4, "reviewNote": "고기 신선, 가족 방문 적합, 가격은 보통", "verified": true, "verifyNote": "다이닝코드 주소·영업 중 표시·휴무 확인, 최신 리뷰 4/27(연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=rHsZRTdkwFGT", "checkedAt": "2026-10-17"}, {"id": "greenough-gwonseon", "category": "poke", "name": "그리너프", "menu": "프리미엄포케 12,500원 · 프리미엄숙성생연어샐러드 15,500원", "address": "경기도 수원시 권선구 효원로266번길 25 1층", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "21:30", "closed": [0], "note": "토요일 21:00 마감, 라스트오더 21:00"}, "note": "샐러드·포케·웜볼·그릭요거트 전문점", "rating": 4.5, "ratingCount": 9, "reviewNote": "재료 신선·다이어트식, 조용해 혼밥 좋음, 주차 협소", "verified": true, "verifyNote": "다이닝코드 주소·영업시간, 폐업 표시 없음, 최근 리뷰 6월(연도 미표기)", "source": "https://www.diningcode.com/profile.php?rid=tCDMuCl0I6FM", "checkedAt": "2026-10-17"}, {"id": "baetsal-dodook-ingye", "category": "poke", "name": "뱃살도둑 인계점", "menu": "생생 연어 포케 13,900원 · 비프 스테이크 포케 12,900원", "address": "경기도 수원시 팔달구 경수대로466번길 59 1층 102호", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "10:00", "close": "01:00", "weekend": {"open": "10:00", "close": "22:00"}, "note": "화~금 10:00~01:00 기준, 월요일 시간 미표기"}, "note": "인계동 샐러드·포케·도시락, 늦게까지 영업", "rating": 5.0, "ratingCount": 3, "reviewNote": "맛·위생 호평, 지하주차장 무료", "verified": true, "verifyNote": "다이닝코드 주소·영업 중 표시, 2026-06 추정 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=jncnTgOlTiSv", "checkedAt": "2026-10-17"}, {"id": "poke-allday-yeongtong", "category": "poke", "name": "포케올데이 영통점", "menu": "포케 10,900원 · 씨랩 6,900원", "address": "경기도 수원시 영통구 반달로 82-1 1층", "area": "영통", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "08:30", "close": "22:00", "note": "월~금 08:30~22:00, 토 10:00~20:00, 일 09:00~21:00"}, "note": "키오스크로 토핑·소스 고르는 커스텀 포케", "rating": 4.7, "ratingCount": 4, "reviewNote": "재료 신선·양 푸짐, 친절", "verified": false, "verifyNote": "다이닝코드 주소·영업 중 표시 확인, 단 최신 리뷰 2024-01로 2025-26 리뷰 없음", "source": "https://www.diningcode.com/profile.php?rid=HzUfo5Ks6RMu", "checkedAt": "2026-10-17"}, {"id": "gabojeong", "category": "galbi", "name": "가보정", "menu": "한우 양념갈비 79,000원 · 미국산 양념갈비 정식(점심특선) 43,000원 · 한우갈비탕 28,000원", "address": "경기도 수원시 팔달구 장다리로 282 의성빌딩", "area": "팔달", "lat": null, "lng": null, "price": 3, "priceText": "1인 4만원 이상", "hours": {"open": "11:30", "close": "21:30", "weekend": {"open": "11:00", "close": "21:30"}, "note": "토요일은 22:00까지"}, "note": "수원왕갈비 대표 대형 갈비집, 인계동 본관·2관·3관 운영, 무료주차·룸 다수", "rating": 4.3, "ratingCount": 104, "reviewNote": "고기 질·밑반찬 호평, 가격 부담(가격 2.9)", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, '영업 중' 표시, 요일별 영업시간, 최근 리뷰(8월 31일 등) 확인", "source": "https://www.diningcode.com/profile.php?rid=FnhWbyc4598j", "checkedAt": "2026-10-17"}, {"id": "bon-suwon-galbi", "category": "galbi", "name": "본수원갈비", "menu": "생갈비 450g 70,000원 · 양념갈비 450g 65,000원 · 갈비탕(평일 점심) 20,000원", "address": "경기도 수원시 팔달구 중부대로223번길 41", "area": "팔달", "lat": null, "lng": null, "price": 3, "priceText": "1인 6~7만원", "hours": {"open": "11:30", "close": "21:30", "note": "요일에 따라 21:00 마감, 라스트오더 20:00~20:30. 휴무일 있음(요일 미확인)"}, "note": "우만동 생갈비 노포, 테이블당 2인분 이상 주문, 대기 잦음", "rating": 4.2, "ratingCount": 38, "reviewNote": "고기 품질·된장찌개 호평(맛 4.7), 가격 부담", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, '영업 중' 표시, 2025년 3월 리뷰·'3일 전' 리뷰 확인. 요일별 시간표 순서 불명확", "source": "https://www.diningcode.com/profile.php?rid=qU14gsqVydby", "checkedAt": "2026-10-17"}, {"id": "silla-galbi", "category": "galbi", "name": "신라갈비", "menu": "왕양념갈비정식 37,000원 · 왕생갈비 70,000원 · 한우양념갈비 77,000원", "address": "경기도 수원시 영통구 동수원로 538", "area": "영통", "lat": null, "lng": null, "price": 3, "priceText": "1인 4만원 이상", "hours": {"open": "11:30", "close": "21:30", "weekend": {"open": "11:00", "close": "21:30"}, "note": "라스트오더 20:20"}, "note": "원천동 왕갈비 전통 갈비집, 정갈한 반찬", "rating": 4.2, "ratingCount": 22, "reviewNote": "고기·반찬·응대 호평, 가격 만족도 낮음(2.7)", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, 2026년 10월 요일별 영업시간, 2025년 11월 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=rKJ1O1uVhkce", "checkedAt": "2026-10-17"}, {"id": "yongseong-tongdak", "category": "tongdak", "name": "용성통닭", "menu": "왕갈비통닭 24,000원 · 시골통닭 21,000원 · 반반치킨 22,000원", "address": "경기도 수원시 팔달구 정조로800번길 15", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "23:00", "closed": [2]}, "note": "통닭거리 대표집, 닭똥집·닭발튀김 서비스", "rating": 4.3, "ratingCount": 79, "reviewNote": "바삭한 옛날통닭·푸짐함 호평, 피크타임 대기 30분 이상", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, '영업 중' 표시, 화요일 휴무, 최근 리뷰(10월 1일 등) 확인", "source": "https://www.diningcode.com/profile.php?rid=8RJwkblQnXOI", "checkedAt": "2026-10-17"}, {"id": "jinmi-tongdak", "category": "tongdak", "name": "진미통닭", "menu": "후라이드 21,000원 · 양념통닭 22,000원 · 카레통닭 25,000원", "address": "경기도 수원시 팔달구 정조로800번길 21", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "23:00", "closed": [1], "note": "월요일 휴무는 블로그 후기 기준"}, "note": "통닭거리 원조급 노포, 포장 전용 키오스크, 주차장 없음", "rating": 4.1, "ratingCount": 82, "reviewNote": "바삭·담백한 튀김옷, 가성비 호평, 웨이팅 김", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, 영업시간·당일 상태 표시, 폐업 표시 없음, 최근 리뷰 10월 1일(연도 미표시)", "source": "https://www.diningcode.com/profile.php?rid=ZmukzrEgQ4Er", "checkedAt": "2026-10-17"}, {"id": "maehyang-tongdak", "category": "tongdak", "name": "매향통닭", "menu": "가마솥통닭 20,000원 · 닭껍질교자 6,000원 · 떡볶이 6,000원", "address": "경기도 수원시 팔달구 수원천로 317", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:30", "close": "23:00", "closed": [3], "weekend": {"open": "11:30", "close": "22:30"}, "note": "라스트오더 마감 30분 전"}, "note": "튀김옷 없이 가마솥에 통째로 튀기는 단일메뉴 통닭", "rating": 4.1, "ratingCount": 12, "reviewNote": "가마솥 통닭 특색 호평, 포장 시 눅눅함 지적", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, 요일별 영업시간(수 휴무), 2025년 10월 27일 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=k4GkKnrmn1w4", "checkedAt": "2026-10-17"}, {"id": "wonjo-eommane", "category": "sundae", "name": "원조엄마네", "menu": "철판볶음(순대+곱창) 15,000원 · 순대국 10,000원 · 볶음밥 2,000원", "address": "경기도 수원시 팔달구 팔달문로 19 지동시장 지동순대타운", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원", "hours": {"open": "10:30", "close": "22:00", "closed": [2]}, "note": "지동 순대타운 대표 순대볶음집, 지동시장 주차장 1시간 무료", "rating": 4.3, "ratingCount": 38, "reviewNote": "철판볶음·볶음밥 맛·양 호평, 위생 점수 낮음(2.8)", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, '영업 중' 표시, 2026년 10월 요일별 시간(화 휴무), 10월 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=ejv29Nei1sVl", "checkedAt": "2026-10-17"}, {"id": "jeollado-jip", "category": "sundae", "name": "전라도집", "menu": "순대곱창볶음 30,000원 · 차돌소곱창전골 39,000원 · 순대국 11,000원", "address": "경기도 수원시 팔달구 팔달문로 19 지동시장 순대타운", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1~2만원", "hours": {"open": "10:00", "close": "21:00", "closed": [3], "note": "토요일 시간 미표시"}, "note": "순대타운 내 곱창전골·순대곱창볶음 집, 친절한 응대", "rating": 4.5, "ratingCount": 7, "reviewNote": "차돌소곱창전골 푸짐·맛 호평, 주차 불편", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, 요일별 시간(수 휴무), '2일 전' 리뷰 확인. 평가자 수 적음", "source": "https://www.diningcode.com/profile.php?rid=FFclRdKDMyLY", "checkedAt": "2026-10-17"}, {"id": "nammun-sundaeguk", "category": "sundae", "name": "남문순대국", "menu": "순대국 6,500원 · 술국 12,000원 · 머리고기 15,000원", "address": "경기도 수원시 팔달구 정조로791번길 5", "area": "팔달", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원 이하", "hours": {"open": "11:00", "close": "19:30"}, "note": "팔달문 앞 맑은 국물 콩나물 순대국 노포, 현금 할인, 혼밥 좋음", "rating": 3.95, "ratingCount": 30, "reviewNote": "가성비·양·친절 호평, 매장 좁고 주차 어려움", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, 2026년 10월 18~23일 영업시간·당일 상태 표시 확인. 리뷰 연도 미표시, 평점 4.0 미만", "source": "https://www.diningcode.com/profile.php?rid=SysooeQif1ug", "checkedAt": "2026-10-17"}, {"id": "haruon", "category": "hansik", "name": "하루온", "menu": "하루온한정식(보리밥 한상, 2인 이상) 1인 17,000원 · 고등어구이 10,000원 · 제육볶음 10,000원", "address": "경기도 수원시 권선구 금호로 143 1층", "area": "권선", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "11:00", "close": "21:30", "break": "15:00~17:00", "note": "일요일 21:00 마감, 라스트오더 마감 1시간 전"}, "note": "구운동 보리밥 한정식, 넓은 무료주차", "rating": 4.6, "ratingCount": 11, "reviewNote": "푸짐한 한상·깔끔한 매장·친절 호평", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, 2026년 10월 요일별 영업시간, 2025년 9월 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=b1Gyx9cIac6f", "checkedAt": "2026-10-17"}, {"id": "haenggung-jeongchan", "category": "hansik", "name": "행궁정찬", "menu": "간장꼬막정식 23,000원 · 보리굴비정식 38,000원 · 소갈비찜정식 42,000원", "address": "경기도 수원시 영통구 광교중앙로 140 수원컨벤션센터 3층 300호", "area": "영통", "lat": null, "lng": null, "price": 2, "priceText": "1인 2~4만원", "hours": {"open": "11:10", "close": "21:30", "break": "15:00~16:30", "note": "라스트오더 19:40"}, "note": "광교호수공원 전망 한정식, 가족모임·데이트용", "rating": 4.3, "ratingCount": 12, "reviewNote": "전망·정갈한 꼬막정식 호평, 가격 보통", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, 요일별 영업시간·당일 상태, 2025년 10월 1일 리뷰 확인", "source": "https://www.diningcode.com/profile.php?rid=Uteiujo7u2fU", "checkedAt": "2026-10-17"}, {"id": "jaseon-nongwon", "category": "hansik", "name": "자선농원", "menu": "자선보리밥 11,000원 · 청국장 11,000원 · 해물파전 17,000원", "address": "경기도 수원시 장안구 광교산로 363-1", "area": "장안", "lat": null, "lng": null, "price": 1, "priceText": "1인 1만원대", "hours": {"open": "09:00", "close": "21:00", "note": "라스트오더 19:30"}, "note": "광교산 입구 보리밥·청국장집, 2층 카페, 무료주차", "rating": 4.7, "ratingCount": 7, "reviewNote": "보리밥·나물·청국장 구성 호평, 친절", "verified": true, "verifyNote": "다이닝코드 프로필: 주소, '영업 중' 표시, 2025년 10월 8일 리뷰 확인. 평가자 수 적음", "source": "https://www.diningcode.com/profile.php?rid=NlpcKAXJMAGC", "checkedAt": "2026-10-17"}]
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+"use strict";
+// 거리 기준점: 수원화성(팔달구) 좌표, 출처 https://en.wikipedia.org/wiki/Hwaseong_Fortress
+var BASE={name:"수원화성(팔달구)",lat:37.27222,lng:127.00833};
+// 지역별 팔달구 출발 차량 소요시간(대략, 내가 정한 추정치). 식당 좌표가 없을 때 거리 표시용.
+var AREA={"팔달":{min:10,label:"수원 팔달구"},"권선":{min:15,label:"수원 권선구"},"장안":{min:15,label:"수원 장안구"},
+  "영통":{min:20,label:"수원 영통구·광교"},"화성반월":{min:25,label:"화성 반월동"},"안산":{min:40,label:"안산"},"동탄":{min:30,label:"화성 동탄"},"수지":{min:35,label:"용인 수지"}};
+
+// 메뉴 카테고리. fav = 와이프 선호 가중치
+var CATS=[
+ {id:"chicken",short:"치킨",name:"치킨",ico:"🍗",cuisine:["한식","양식"],soup:"no",price:[1],hunger:["보통","엄청"],deliv:true,fav:3.5,
+  desc:"후라이드·교촌·굽네 볼케이노 라인. 지코바·푸라닭 스타일은 빼뒀어요. 윙 콤비 메뉴로 버팔로윙 욕구도 해결!"},
+ {id:"sushi",short:"스시",name:"스시",ico:"🍣",cuisine:["일식"],soup:"no",price:[2,3],hunger:["살짝","보통"],deliv:false,fav:3.5,desc:"초밥부터 오마카세까지."},
+ {id:"yakiniku",short:"고기구이",name:"야끼니쿠·고기구이",ico:"🥩",cuisine:["일식","한식"],soup:"no",price:[2,3],hunger:["엄청"],deliv:false,fav:3.5,desc:"굽는 고기는 다 좋아! 야키니쿠 위주로 골랐어요."},
+ {id:"shabu",short:"샤브샤브",name:"샤브샤브",ico:"🍲",cuisine:["일식","한식"],soup:"yes",price:[1,2],hunger:["보통","엄청"],deliv:false,fav:3.2,desc:"뜨끈한 국물 + 고기 무제한."},
+ {id:"jjukkumi",short:"쭈꾸미",name:"쭈꾸미볶음 & 보리밥",ico:"🐙",cuisine:["한식"],soup:"no",price:[1],hunger:["보통","엄청"],deliv:false,fav:3.2,desc:"매콤한 쭈꾸미에 보리밥 쓱쓱."},
+ {id:"western",short:"스테이크·파스타",name:"양식·스테이크",ico:"🍝",cuisine:["양식"],soup:"no",price:[2,3],hunger:["보통","엄청"],deliv:false,fav:3.2,desc:"포크너·올리브1999 같은 스테이크·파스타집. 포크너는 안산이라 멀어요."},
+ {id:"fish",short:"생선구이",name:"갈치·생선구이",ico:"🐟",cuisine:["한식"],soup:"no",price:[1,2],hunger:["보통"],deliv:false,fav:3,desc:"갈치구이, 뼈 없는 생선 좋아해요. 태로는 순살갈치 조림."},
+ {id:"chinese",short:"중식",name:"중식 (짜장·짬뽕·깐풍기)",ico:"🥢",cuisine:["중식"],soup:"both",price:[1,2],hunger:["보통","엄청"],deliv:true,fav:3,desc:"깐풍기·탕수육 맛있는 중국집 위주. 짜장·짬뽕도 같이."},
+ {id:"izakaya",short:"꼬치·이자카야",name:"이자카야 (닭꼬치·타코야끼)",ico:"🍢",cuisine:["일식"],soup:"no",price:[1,2],hunger:["살짝","보통"],deliv:false,fav:3,desc:"닭꼬치에 한잔. 대부분 저녁 장사예요. 타코야끼는 평 좋은 곳에서 못 찾았어요."},
+ {id:"mexican",short:"멕시칸",name:"멕시칸 (타코·부리또)",ico:"🌮",cuisine:["양식"],soup:"no",price:[1,2],hunger:["보통","엄청"],deliv:false,fav:3.2,desc:"타코, 부리또, 퀘사디아, 나초. 와이프가 멕시칸도 좋아해요!"},
+ {id:"asian",short:"쌀국수",name:"쌀국수·베트남",ico:"🍜",cuisine:["아시안"],soup:"both",price:[1],hunger:["살짝","보통"],deliv:false,fav:0,desc:"쌀국수, 분짜, 반쎄오 같은 베트남 음식."},
+ {id:"thai",short:"태국음식",name:"태국음식 (팟타이)",ico:"🥥",cuisine:["아시안"],soup:"both",price:[1,2],hunger:["보통","엄청"],deliv:false,fav:0,desc:"팟타이, 똠얌꿍, 푸팟퐁커리."},
+ {id:"indian",short:"인도커리",name:"인도커리·난",ico:"🍛",cuisine:["아시안"],soup:"no",price:[1,2],hunger:["보통","엄청"],deliv:false,fav:0,desc:"커리에 갓 구운 난, 탄두리치킨."},
+ {id:"bunsik",short:"떡볶이",name:"떡볶이·튀김",ico:"🍥",cuisine:["분식"],soup:"both",price:[1],hunger:["살짝","보통"],deliv:false,fav:0,desc:"떡볶이·튀김·순대로 가볍게."},
+ {id:"gimbap",short:"김밥·우동",name:"김밥·우동·라면",ico:"🍙",cuisine:["분식"],soup:"both",price:[1],hunger:["살짝","보통"],deliv:true,fav:0,desc:"김밥 한 줄에 우동이나 라면. 참깨라면 생각날 때!"},
+ {id:"mandu",short:"만두",name:"만두",ico:"🥟",cuisine:["분식"],soup:"both",price:[1],hunger:["살짝","보통"],deliv:false,fav:0,desc:"찐만두, 군만두, 만둣국."},
+ // 아래부터는 와이프 리스트엔 없지만 한국에서 많이 먹는 메뉴 (fav 낮게 → 최애보다 뒤에)
+ {id:"gukbap",short:"국밥·찌개",name:"국밥·찌개",ico:"🥘",cuisine:["한식"],soup:"yes",price:[1],hunger:["보통","엄청"],deliv:true,fav:0.5,desc:"감자탕·순대국·김치찌개. 아빠표 김치찌개만은 못하겠지만!"},
+ {id:"samgyup",short:"삼겹살",name:"삼겹살·돼지구이",ico:"🥓",cuisine:["한식"],soup:"no",price:[1,2],hunger:["엄청"],deliv:false,fav:0,desc:"동네 삼겹살·목살집."},
+ {id:"jokbal",short:"족발·보쌈",name:"족발·보쌈",ico:"🍖",cuisine:["한식"],soup:"no",price:[1,2],hunger:["보통","엄청"],deliv:true,fav:0,desc:"배달도 많이 하는 족발·보쌈."},
+ {id:"noodle",short:"칼국수·냉면",name:"칼국수·냉면",ico:"🥣",cuisine:["한식"],soup:"both",price:[1],hunger:["살짝","보통"],deliv:false,fav:0,desc:"가볍게 면 한 그릇."},
+ {id:"mala",short:"마라탕",name:"마라탕·마라샹궈",ico:"🌶️",cuisine:["중식"],soup:"yes",price:[1],hunger:["살짝","보통"],deliv:true,fav:0,desc:"얼얼한 마라탕, 재료 골라 담기."},
+ {id:"donkatsu",short:"돈까스·라멘",name:"돈까스·라멘",ico:"🍱",cuisine:["일식"],soup:"both",price:[1],hunger:["보통","엄청"],deliv:false,fav:0,desc:"바삭한 돈까스, 진한 라멘."},
+ {id:"hoe",short:"회·해산물",name:"회·해산물",ico:"🦑",cuisine:["한식","일식"],soup:"no",price:[2,3],hunger:["보통","엄청"],deliv:true,fav:0,desc:"광어·우럭 회, 물회, 조개구이."},
+ {id:"gopchang",short:"곱창·막창",name:"곱창·막창",ico:"🔥",cuisine:["한식"],soup:"no",price:[2,3],hunger:["보통","엄청"],deliv:false,fav:0,desc:"고소한 곱창·막창 구이. 저녁에 한잔."},
+ {id:"dakgalbi",short:"닭갈비·찜닭",name:"닭갈비·찜닭",ico:"🐔",cuisine:["한식"],soup:"no",price:[1],hunger:["보통","엄청"],deliv:false,fav:0,desc:"철판 닭갈비에 볶음밥, 또는 찜닭."},
+ {id:"galbi",short:"수원왕갈비",name:"수원왕갈비",ico:"🍖",cuisine:["한식"],soup:"no",price:[2,3],hunger:["엄청"],deliv:false,fav:0,desc:"수원 하면 왕갈비! 양념 소갈비 한 대가 손바닥보다 커요."},
+ {id:"tongdak",short:"옛날통닭",name:"통닭거리 옛날통닭",ico:"🐓",cuisine:["한식"],soup:"no",price:[1],hunger:["보통","엄청"],deliv:true,fav:0,desc:"팔달문 통닭거리의 가마솥 통닭. 똥집튀김 서비스도 유명해요."},
+ {id:"sundae",short:"순대볶음",name:"순대볶음·순대국",ico:"🌭",cuisine:["한식"],soup:"both",price:[1],hunger:["보통","엄청"],deliv:false,fav:0,desc:"지동시장 순대타운 순대볶음, 뜨끈한 순대국."},
+ {id:"hansik",short:"한정식·비빔밥",name:"한정식·비빔밥",ico:"🍚",cuisine:["한식"],soup:"no",price:[1,2,3],hunger:["보통","엄청"],deliv:false,fav:0,desc:"반찬 가득 한 상, 또는 비빔밥 한 그릇."},
+ {id:"donburi",short:"텐동·덮밥",name:"텐동·덮밥",ico:"🍤",cuisine:["일식"],soup:"no",price:[1,2],hunger:["보통","엄청"],deliv:false,fav:0,desc:"바삭한 튀김 올린 텐동 한 그릇."},
+ {id:"yukhoe",short:"육회·물회",name:"육회·물회",ico:"🥗",cuisine:["한식"],soup:"both",price:[1,2],hunger:["살짝","보통"],deliv:false,fav:0,desc:"고소한 육회, 시원한 물회."},
+ {id:"poke",short:"포케·샐러드",name:"포케·샐러드",ico:"🥙",cuisine:["양식"],soup:"no",price:[1],hunger:["살짝","보통"],deliv:true,fav:0,desc:"가볍고 든든한 포케 볼, 샐러드."},
+ {id:"burger",short:"피자·버거",name:"피자·버거",ico:"🍔",cuisine:["양식"],soup:"no",price:[1],hunger:["살짝","보통","엄청"],deliv:true,fav:0,desc:"수제버거·피자로 가볍게."}
+];
+var FAV_MIN=3; // 이 이상이면 와이프 최애
+var CAT=Object.fromEntries(CATS.map(function(c){return [c.id,c];}));
+// 요즘 뜨는 거·전통: trends.json (매주 자동 업데이트)으로 바뀜
+var TR={updatedAt:null,trend:[],trad:[],cats:[]},TREND={},TRAD={};
+function applyTrends(t){
+  if(!t||typeof t!=="object")return;TR=t;TREND={};TRAD={};
+  (t.cats||[]).forEach(function(c){if(c&&c.id&&!CAT[c.id]&&Array.isArray(c.cuisine)){c.fav=0;CATS.push(c);CAT[c.id]=c;if(c.main)MAIN[c.id]=c.main;}});
+  (t.trend||[]).forEach(function(x){if(CAT[x.cat])TREND[x.cat]=x;});
+  (t.trad||[]).forEach(function(x){if(CAT[x.cat])TRAD[x.cat]=x;});
+  var q=QS.filter(function(q){return q.k==="mood";})[0];if(q&&t.updatedAt)q.hint="요즘 뜨는 거는 "+t.updatedAt+" 기준, 매주 업데이트";
+}
+
+// 어제 먹은 큰 종류 → 해당 메뉴 감점. 중식은 중식 카테고리와 같아서 완전 제외
+var BIG=["한식","중식","일식","양식","아시안","분식"];
+var BIG_EQ={"중식":["chinese"],"아시안":["asian","thai","indian"],"분식":["bunsik","gimbap","mandu"]};
+var MAIN={sushi:"일식",yakiniku:"일식",shabu:"일식",izakaya:"일식",donkatsu:"일식",jjukkumi:"한식",fish:"한식",gukbap:"한식",samgyup:"한식",jokbal:"한식",galbi:"한식",tongdak:"한식",sundae:"한식",hansik:"한식",yukhoe:"한식",donburi:"일식",poke:"양식",hoe:"한식",gopchang:"한식",dakgalbi:"한식",noodle:"한식",western:"양식",burger:"양식",mexican:"양식",chinese:"중식",mala:"중식"};
+var QS=[
+ {k:"yesterday",label:"어제 뭐 먹었어?",hint:"종류든 메뉴든 여러 개 OK · 고른 건 오늘 추천에서 빠져요",multi:true,opts:BIG.concat(CATS.filter(function(c){return c.fav>=FAV_MIN&&c.id!=="chinese";}).map(function(c){return c.ico+" "+c.short;})).concat(["다른 거"]),def:[]},
+ {k:"mood",label:"오늘 기분",multi:false,opts:["골고루","와이프 최애","요즘 뜨는 거","전통·수원 명물"],def:"골고루"},
+ {k:"hunger",label:"배고픔",multi:false,opts:["살짝","보통","엄청"],def:"보통"},
+ {k:"cuisine",label:"끌리는 종류",hint:"여러 개 OK",multi:true,opts:["한식","중식","일식","양식","분식","아시안"],def:[]},
+ {k:"soup",label:"국물",multi:false,opts:["국물!","안 국물","상관없음"],def:"상관없음"},
+ {k:"budget",label:"1인 예산",multi:false,opts:["1만원대","2~3만원","그 이상"],def:"2~3만원"},
+ {k:"move",label:"이동",multi:false,opts:["배달","팔달구 근처","차로 15분","차로 30분","멀어도 OK"],def:"차로 15분"}
+];
+var MOVE_MAX={"팔달구 근처":10,"차로 15분":15,"차로 30분":30,"멀어도 OK":999,"배달":15};
+var ans={};QS.forEach(function(q){ans[q.k]=Array.isArray(q.def)?q.def.slice():q.def;});
+function yest(){var o={};CATS.forEach(function(c){if(ans.yesterday.indexOf(c.ico+" "+c.short)>=0)o[c.id]=1;});Object.keys(BIG_EQ).forEach(function(k){if(ans.yesterday.indexOf(k)>=0)BIG_EQ[k].forEach(function(id){o[id]=1;});});return o;}
+function yestBig(){var o={};CATS.forEach(function(c){if(MAIN[c.id]&&!(BIG_EQ[MAIN[c.id]]||[]).includes(c.id)&&ans.yesterday.indexOf(MAIN[c.id])>=0)o[c.id]=1;});return o;}
+
+var DATA=[];
+try{DATA=JSON.parse(document.getElementById("restaurant-data").textContent);}catch(e){DATA=[];}
+try{applyTrends(JSON.parse(document.getElementById("trend-data").textContent));}catch(e){}
+
+// ---- 최근 먹은 메뉴 (localStorage, 실패해도 동작) ----
+var LS_KEY="mealpicker.recent.v1";
+function loadRecent(){try{var v=JSON.parse(localStorage.getItem(LS_KEY)||"[]");return Array.isArray(v)?v:[];}catch(e){return [];}}
+function saveRecent(list){try{localStorage.setItem(LS_KEY,JSON.stringify(list.slice(-30)));}catch(e){}}
+function daysAgo(ts){return (Date.now()-ts)/86400000;}
+function recentWithin3(){var s={};loadRecent().forEach(function(r){if(daysAgo(r.t)<3)s[r.c]=r.t;});return s;}
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
+function $(id){return document.getElementById(id);}
+
+// ---- 질문 렌더 ----
+function renderQuestions(){
+  var box=$("questions");box.innerHTML="";
+  QS.forEach(function(q){
+    var d=document.createElement("div");d.className="q";
+    d.innerHTML='<div class="q-label">'+esc(q.label)+(q.hint?'<small>'+esc(q.hint)+'</small>':'')+'</div><div class="chips" role="group" aria-label="'+esc(q.label)+'"></div>';
+    var chips=d.querySelector(".chips");
+    q.opts.forEach(function(o,i){
+      var b=document.createElement("button");b.type="button";b.className="chip";b.id="q-"+q.k+"-"+i;b.textContent=o;
+      var on=q.multi?ans[q.k].indexOf(o)>=0:ans[q.k]===o;b.setAttribute("aria-pressed",on?"true":"false");
+      b.addEventListener("click",function(){
+        seen={};if(q.multi){var a=ans[q.k],ix=a.indexOf(o);if(ix>=0)a.splice(ix,1);else a.push(o);}else ans[q.k]=o;
+        renderQuestions();
+      });
+      chips.appendChild(b);
+    });
+    box.appendChild(d);
+  });
+  box.style.display="flex";box.style.flexDirection="column";box.style.gap="14px";
+}
+function renderRecent(){
+  var box=$("recentBox"),list=loadRecent().filter(function(r){return daysAgo(r.t)<3;});
+  if(!list.length){box.innerHTML='<span>최근 3일 동안 먹은 기록이 없어요.</span>';return;}
+  var seen={},html='<span>최근 3일:</span>';
+  list.slice().reverse().forEach(function(r){if(seen[r.c]||!CAT[r.c])return;seen[r.c]=1;
+    var d=Math.floor(daysAgo(r.t));html+='<span class="tag">'+CAT[r.c].ico+' '+esc(CAT[r.c].name)+' · '+(d===0?'오늘':d+'일 전')+'</span>';});
+  html+='<button class="linkish" id="clearRecent" type="button">기록 지우기</button>';
+  box.innerHTML=html;
+  $("clearRecent").addEventListener("click",function(){saveRecent([]);renderRecent();});
+}
+
+// ---- 영업시간 ----
+var openOnly=true;
+function hm(t){var a=t.split(":");return (+a[0])*60+(+a[1]);}
+function openState(r,now){
+  var h=r.hours;now=now||new Date();
+  if(!h)return {k:"unknown",t:"영업시간 미확인"};
+  var m=now.getHours()*60+now.getMinutes(),dow=now.getDay();
+  function win(day){var w=(day===0||day===6)&&h.weekend?h.weekend:h;var o=hm(w.open),c=hm(w.close);if(c<=o)c+=1440;return {o:o,c:c,close:w.close,open:w.open};}
+  var y=(dow+6)%7,wy=win(y);
+  if(!(h.closed&&h.closed.indexOf(y)>=0)&&m+1440<wy.c)return {k:"open",t:"영업 중 · "+wy.close+"까지"};
+  if(h.closed&&h.closed.indexOf(dow)>=0)return {k:"off",t:"오늘 휴무"};
+  var w=win(dow);
+  if(m>=w.o&&m<w.c){
+    if(h.break){var b=h.break.split("-");if(m>=hm(b[0])&&m<hm(b[1]))return {k:"break",t:"브레이크 · "+b[1]+" 재오픈"};}
+    return {k:"open",t:"영업 중 · "+w.close+"까지"};}
+  if(m<w.o)return {k:"before",t:"영업 전 · "+w.open+" 오픈"};
+  return {k:"shut",t:"오늘 영업 끝"};
+}
+function bayes(r){return r.rating==null?3.6:(r.rating*r.ratingCount+4.0*5)/(r.ratingCount+5);}
+function ratingHtml(r){
+  if(r.rating==null)return '<span class="rt none">평점 없음</span>';
+  return '<span class="rt">★'+r.rating.toFixed(1)+'</span><span>'+r.ratingCount+'명'+(r.ratingCount<3?" · 평가 적음":"")+'</span>';
+}
+function isOpen(r){return openState(r).k==="open";}
+function hoursText(h){if(!h)return "영업시간 미확인";var d=["일","월","화","수","목","금","토"];
+  return h.open+"~"+h.close+(h.weekend?" (주말 "+h.weekend.open+"~"+h.weekend.close+")":"")+(h.break?" · 브레이크 "+h.break:"")+(h.closed?" · "+h.closed.map(function(x){return d[x];}).join("·")+"요일 휴무":"")+(h.note?" · "+h.note:"");}
+
+// ---- 점수 계산 ----
+function areaMin(r){return (AREA[r.area]||{min:30}).min;}
+function inRange(r){return areaMin(r)<=MOVE_MAX[ans.move];}
+function budgetLevel(){return {"1만원대":1,"2~3만원":2,"그 이상":3}[ans.budget];}
+function scoreCat(c,recent){
+  var s=c.fav,why=[],p;
+  if(ans.mood==="와이프 최애"){if(c.fav>=FAV_MIN){s+=3;why.push("와이프 최애");}else s-=3;}
+  else if(ans.mood==="요즘 뜨는 거"){if(TREND[c.id]){s+=7;why.push("요즘 뜨는 거");}else s-=2;}
+  else if(ans.mood==="전통·수원 명물"){if(TRAD[c.id]){s+=7;why.push("전통 한 끼");}else s-=2;}
+  else if(TREND[c.id]||TRAD[c.id])s+=1;
+  if(ans.cuisine.length){
+    if(c.cuisine.some(function(x){return ans.cuisine.indexOf(x)>=0;})){s+=4;why.push(ans.cuisine.filter(function(x){return c.cuisine.indexOf(x)>=0;})[0]);}
+    else s-=8;
+  }
+  if(ans.soup==="국물!"){p=c.soup==="yes"?3:c.soup==="both"?1.5:-3;s+=p;if(p>0)why.push("국물");}
+  else if(ans.soup==="안 국물"){p=c.soup==="no"?2:c.soup==="both"?1:-2;s+=p;if(p>0)why.push("안 국물");}
+  var bl=budgetLevel();
+  if(c.price.indexOf(bl)>=0){s+=2;why.push(ans.budget);}else{s-=1.5*Math.min.apply(null,c.price.map(function(x){return Math.abs(x-bl);}));}
+  if(c.hunger.indexOf(ans.hunger)>=0){s+=2;why.push("배고픔 "+ans.hunger);}else s-=2;
+  var n=DATA.filter(function(r){return r.category===c.id&&inRange(r);}).length;
+  if(ans.move==="배달"){if(c.deliv){s+=3;why.push("배달");}else s-=4;}
+  else if(n===0){s-=5;}else{s+=Math.min(n,3)*0.5;why.push(ans.move);}
+  if(recent[c.id]){s-=6;}
+  var openN=DATA.filter(function(r){return r.category===c.id&&(ans.move==="배달"||inRange(r))&&isOpen(r);}).length;
+  if(openN===0){s-=8;}
+  if(yest()[c.id]){s-=12;}
+  if(yestBig()[c.id]){s-=5;}
+  s+=Math.random()*1.2;
+  return {c:c,s:s,why:why,recent:!!recent[c.id],yest:!!yest()[c.id],yb:!!yestBig()[c.id],closedNow:openN===0};
+}
+var seen={};
+function rank(){var rc=recentWithin3();return CATS.filter(function(c){return !seen[c.id];}).map(function(c){return scoreCat(c,rc);}).sort(function(a,b){return b.s-a.s;});}
+
+// ---- 결과 ----
+var current=null;
+function showCands(list){
+  var y=list.filter(function(x){return !x.yest;});if(y.length>=3)list=y;
+  // 고른 종류마다 후보가 최소 1개는 들어가게
+  if(ans.cuisine.length>1){
+    var top=list.slice(0,3),rest=list.slice(3);
+    ans.cuisine.forEach(function(k){
+      if(top.some(function(x){return x.c.cuisine.indexOf(k)>=0;}))return;
+      var i=rest.findIndex(function(x){return x.c.cuisine.indexOf(k)>=0&&!x.yest;});if(i<0)return;
+      var cnt={};top.forEach(function(x){x.c.cuisine.forEach(function(q){if(ans.cuisine.indexOf(q)>=0)cnt[q]=(cnt[q]||0)+1;});});
+      for(var j=top.length-1;j>=0;j--){var ok=top[j].c.cuisine.every(function(q){return ans.cuisine.indexOf(q)<0||cnt[q]>1;});
+        if(ok){rest.push(top[j]);top[j]=rest.splice(i,1)[0];break;}}
+    });
+    list=top.concat(rest);
+  }
+  $("rouletteBox").hidden=true;
+  var box=$("cands");box.innerHTML="";
+  var shown=list.slice(0,3);
+  if(ans.cuisine.length&&!list[0].roul){
+    var m=list.filter(function(x){return x.c.cuisine.some(function(q){return ans.cuisine.indexOf(q)>=0;});});
+    if(m.length){shown=m.slice(0,3);list=m.concat(list.filter(function(x){return m.indexOf(x)<0;}));}
+  }
+  // 후보 구성: 와이프 최애 2개 먼저 + 조건 맞는 다른 인기 메뉴 1개 (없으면 점수순으로 채움)
+  if(!list[0].roul&&ans.mood!=="골고루"){
+    var ok0=function(x){return !x.yest&&!x.closedNow&&(!ans.cuisine.length||x.c.cuisine.some(function(q){return ans.cuisine.indexOf(q)>=0;}));};
+    var want=function(x){return ans.mood==="와이프 최애"?x.c.fav>=FAV_MIN:ans.mood==="요즘 뜨는 거"?!!TREND[x.c.id]:!!TRAD[x.c.id];};
+    var pk=list.filter(function(x){return want(x)&&ok0(x);});
+    list.forEach(function(x){if(pk.length<3&&pk.indexOf(x)<0&&ok0(x))pk.push(x);});
+    if(pk.length)shown=pk.slice(0,3);
+  }
+  else if(!list[0].roul){
+    var ok=function(x){return !x.yest&&!x.closedNow&&(!ans.cuisine.length||x.c.cuisine.some(function(q){return ans.cuisine.indexOf(q)>=0;}));};
+    var favs=list.filter(function(x){return x.c.fav>=FAV_MIN&&ok(x);}).slice(0,2);
+    var oth=list.filter(function(x){return x.c.fav<FAV_MIN&&ok(x);});
+    // 여러 종류 골랐으면 아직 안 나온 종류 먼저
+    var miss=ans.cuisine.filter(function(q){return !favs.some(function(x){return x.c.cuisine.indexOf(q)>=0;});});
+    if(miss.length)oth.sort(function(a,b){var ma=a.c.cuisine.some(function(q){return miss.indexOf(q)>=0;}),mb=b.c.cuisine.some(function(q){return miss.indexOf(q)>=0;});return (mb-ma)||(b.s-a.s);});
+    // 새 메뉴 자리는 비슷한 점수끼리 돌아가며 (늘 같은 게 안 뜨게)
+    if(oth.length>1&&favs.length>=2&&!miss.length){var top=oth.filter(function(x){return x.s>=oth[0].s-2.5;}).slice(0,4);var r=top[Math.floor(Math.random()*top.length)];oth=[r].concat(oth.filter(function(x){return x!==r;}));}
+    var pick3=favs.concat(oth.slice(0,3-favs.length));
+    oth.slice(0,3-favs.length).forEach(function(x){if(favs.length)x.fresh=true;});
+    list.forEach(function(x){if(pick3.length<3&&pick3.indexOf(x)<0&&!x.yest&&(!ans.cuisine.length||ok(x)||!x.closedNow&&false))pick3.push(x);});
+    if(pick3.length)shown=pick3.slice(0,3);
+  }
+  shown.forEach(function(x,i){
+    var b=document.createElement("button");b.type="button";b.className="cand";b.id="cand-"+x.c.id;
+    var tw=TREND[x.c.id]||TRAD[x.c.id];
+    var why=(x.why.length?x.why.slice(0,3).join(" + "):(x.c.fav>=FAV_MIN?"와이프 최애":"인기 메뉴"))+" → "+(tw?tw.why:x.c.name);
+    if(x.fresh)why="새로운 거 하나 · "+why;
+    if(x.closedNow)why+=" (지금 연 곳 없음)";
+    if(x.yest)why+=" (어제 먹은 메뉴)";else if(x.yb)why+=" (어제 "+MAIN[x.c.id]+" 먹어서 감점)";else if(x.recent)why+=" (최근에 먹어서 감점)";
+    else if(i===0&&(Object.keys(yest()).length||Object.keys(yestBig()).length))why+=" · 어제 먹은 건 뺐어요";
+    b.innerHTML='<span class="ico" aria-hidden="true">'+x.c.ico+'</span><span style="min-width:0"><span class="nm">'+esc(x.c.name)+'</span>'+(x.c.fav>=FAV_MIN?' <span class="heart">♥ 와이프 최애</span>':'')+(TREND[x.c.id]?' <span class="heart tr">🔥 요즘 뜸</span>':'')+(TRAD[x.c.id]?' <span class="heart td">🏯 전통</span>':'')+'<br><span class="why">'+esc(why)+'</span></span><span class="rank">'+(i+1)+'위</span>';
+    b.addEventListener("click",function(){pick(x.c.id);});
+    box.appendChild(b);
+  });
+  // 최애 아닌 인기 메뉴도 고를 수 있게 칩으로
+  shownNow=shown.map(function(x){return x.c.id;});
+  renderAllMenus();
+  $("result").hidden=false;
+  var left=rank().filter(function(x){return !x.yest&&shownNow.indexOf(x.c.id)<0;}).length;$("rerollBtn").textContent=left<3?"🔄 처음부터 다시":"🔄 다른 후보 3개";
+  pick(shown[0].c.id);
+}
+var shownNow=[];
+function renderAllMenus(){
+  var mb=$("moreCats");mb.innerHTML="";var yy=yest();
+  ["한식","중식","일식","양식","아시안","분식"].forEach(function(g){
+    var cs=CATS.filter(function(c){return (MAIN[c.id]||c.cuisine[0])===g||(!MAIN[c.id]&&c.cuisine[0]===g);});
+    if(!cs.length)return;
+    cs.sort(function(a,b){return b.fav-a.fav;});
+    var row=document.createElement("div");row.className="mrow";row.innerHTML='<span class="mg">'+g+'</span>';
+    var ch=document.createElement("div");ch.className="chips";
+    cs.forEach(function(c){var b=document.createElement("button");b.type="button";b.className="chip";b.id="more-"+c.id;
+      b.textContent=c.ico+" "+c.short+(c.fav>=FAV_MIN?" ♥":"")+(TREND[c.id]?" 🔥":"")+(TRAD[c.id]?" 🏯":"")+(yy[c.id]?" (어제)":"");b.addEventListener("click",function(){pick(c.id);});ch.appendChild(b);});
+    row.appendChild(ch);mb.appendChild(row);
+  });
+}
+function pick(id){
+  current=id;
+  document.querySelectorAll(".cand").forEach(function(el){el.classList.toggle("on",el.id==="cand-"+id);});
+  document.querySelectorAll("#moreCats .chip").forEach(function(el){el.setAttribute("aria-pressed",el.id==="more-"+id?"true":"false");});
+  renderPlaces(id);
+}
+
+function fmtKm(r){
+  var lat=r.lat,lng=r.lng,tag="";
+  if(lat==null&&geo[r.id]){lat=geo[r.id].lat;lng=geo[r.id].lng;tag=" (주소 자동변환 기준)";}
+  if(lat==null)return null;
+  var R=6371,dLa=(lat-BASE.lat)*Math.PI/180,dLo=(lng-BASE.lng)*Math.PI/180;
+  var a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(BASE.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLo/2)*Math.sin(dLo/2);
+  return "직선 약 "+(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))).toFixed(1)+"km"+tag;
+}
+function region(r){var a=r.address.split(" ");return (a[1]||"")+" "+(a[2]||"");}
+function renderPlaces(id){
+  var c=CAT[id];
+  $("pTitle").textContent=c.ico+" "+c.name+" 맛집";
+  var tw=TREND[id]?["🔥 요즘 뜨는 이유: ",TREND[id]]:TRAD[id]?["🏯 ",TRAD[id]]:null;
+  $("catDesc").innerHTML=esc(c.desc+(ans.move==="배달"?" 배달 가능 여부는 확인 못 했어요. 배달앱에서 상호로 찾아보세요.":""))+
+    (tw?'<br>'+esc(tw[0]+tw[1].why)+(tw[1].source?' <a href="'+esc(tw[1].source)+'" target="_blank" rel="noopener">출처</a>':'')+(TREND[id]&&TR.updatedAt?' ('+esc(TR.updatedAt)+' 기준)':''):'');
+  var all=DATA.filter(function(r){return r.category===id;}).sort(function(a,b){
+    return (isOpen(b)-isOpen(a))||(inRange(b)-inRange(a))||(bayes(b)-bayes(a))||(b.verified-a.verified);});
+  var list=all,openN=all.filter(isOpen).length;
+  if(openOnly&&openN)list=all.filter(isOpen);
+  $("openOnly").setAttribute("aria-pressed",openOnly?"true":"false");
+  $("openMsg").textContent=openOnly?(openN?"지금 열린 "+openN+"곳 · 전체 "+all.length+"곳":"지금 연 곳이 없어서 전체를 보여줘요"):"전체 "+all.length+"곳";
+  var box=$("rlist");box.innerHTML="";
+  if(!list.length){box.innerHTML='<p class="hint">아직 등록된 식당이 없어요. restaurants.json에 추가해 주세요.</p>';}
+  list.forEach(function(r){
+    var km=fmtKm(r),ar=AREA[r.area]||{min:"?",label:r.area},st=openState(r);
+    var coord=r.lat!=null?r.lat.toFixed(5)+", "+r.lng.toFixed(5):null;
+    var kakao=r.lat!=null?"https://map.kakao.com/link/map/"+encodeURIComponent(r.name)+","+r.lat+","+r.lng
+                         :"https://map.kakao.com/link/search/"+encodeURIComponent(r.name);
+    var naver="https://map.naver.com/p/search/"+encodeURIComponent(r.name+" "+region(r));
+    var cls={open:"open",break:"brk"}[st.k]||"shut";
+    var el=document.createElement("article");el.className="card"+(inRange(r)?"":" far");
+    el.innerHTML='<div class="card-h"><h3>'+esc(r.name)+'</h3>'+
+      (r.verified?'<span class="badge ok">✓ 영업 확인</span>':'<span class="badge warn">? 일부 미확인</span>')+'</div>'+
+      '<div class="menu">'+esc(r.menu)+'</div>'+
+      '<div class="status">'+ratingHtml(r)+(r.reviewNote?'<span>'+esc(r.reviewNote)+'</span>':'')+'</div>'+
+      '<div class="status"><span class="st '+cls+'">'+esc(st.t)+'</span><span>'+esc(ar.label+" · 차로 약 "+ar.min+"분")+(inRange(r)?"":" · 조금 멀어요")+'</span><span>'+esc(r.priceText)+'</span></div>'+
+      '<div class="links"><a class="kakao" href="'+kakao+'" target="_blank" rel="noopener">카카오맵</a>'+
+      '<a class="naver" href="'+naver+'" target="_blank" rel="noopener">네이버지도</a></div>'+
+      '<details class="more"><summary>자세히 (주소·영업시간·검증)</summary>'+
+      '<dl class="meta"><dt>주소</dt><dd>'+esc(r.address)+'</dd>'+
+      '<dt>평점</dt><dd>'+(r.rating==null?'다이닝코드 평점 없음':'다이닝코드 ★'+r.rating.toFixed(1)+' ('+r.ratingCount+'명 평가)')+'</dd>'+
+      '<dt>시간</dt><dd>'+esc(hoursText(r.hours))+'</dd>'+
+      '<dt>거리</dt><dd>'+esc((km?km+" · ":"")+"지역 기준 대략")+'</dd>'+
+      '<dt>좌표</dt>'+(coord?'<dd>'+coord+'</dd>':'<dd class="nocoord">좌표 미확인 – 지도 링크로 확인</dd>')+'</dl>'+
+      '<div class="note">'+esc(r.note)+'</div>'+
+      '<div class="vnote">'+esc(r.verifyNote)+' · 확인일 '+esc(r.checkedAt||"")+' · 영업시간은 확인일 기준이라 바뀌었을 수 있어요</div>'+
+      '<div class="links"><button type="button" data-copy="'+esc(r.address)+'">주소 복사</button>'+
+      '<a href="'+esc(r.source)+'" target="_blank" rel="noopener">출처</a></div></details>';
+    box.appendChild(el);
+  });
+  box.querySelectorAll("[data-copy]").forEach(function(b){b.addEventListener("click",function(){
+    var t=b.getAttribute("data-copy");
+    try{navigator.clipboard.writeText(t).then(function(){b.textContent="복사됨!";},function(){b.textContent=t;});}catch(e){b.textContent=t;}
+  });});
+  $("places").hidden=false;
+  drawMarkers(list);
+}
+
+// ---- 룰렛 ----
+function roulette(){
+  var rc=recentWithin3(),yy=yest(),yb=yestBig(),pool=CATS.filter(function(c){return !rc[c.id]&&!yy[c.id]&&!yb[c.id];});
+  if(pool.length<2)pool=CATS.filter(function(c){return !yy[c.id];});if(!pool.length)pool=CATS;
+  var target=pool[Math.floor(Math.random()*pool.length)];
+  $("rouletteBox").hidden=false;$("result").hidden=true;$("places").hidden=true;
+  var slot=$("slot"),i=0,steps=16+Math.floor(Math.random()*5),delay=40;
+  var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce)steps=1;
+  slot.classList.add("spin");$("slotHint").textContent="빙글빙글…";
+  (function tick(){
+    var c=i>=steps-1?target:CATS[i%CATS.length];
+    slot.textContent=c.ico+" "+c.name;i++;
+    if(i<steps){delay*=1.1;setTimeout(tick,delay);}
+    else{slot.classList.remove("spin");$("slotHint").textContent="오늘은 이거! (어제·최근 3일 먹은 메뉴는 빼고 돌렸어요)";
+      var rest=rank().filter(function(x){return x.c.id!==target.id;});
+      showCands([{c:target,s:0,why:["룰렛"],recent:false,yest:false,roul:true}].concat(rest));
+      $("rouletteBox").hidden=false;}
+  })();
+}
+
+// ---- 지도 (Leaflet + OSM, 안 되면 숨김) ----
+var map=null,layer=null,mapOk=false,geo={};
+function initMap(){
+  if(typeof L==="undefined"){mapFail();return;}
+  try{
+    map=L.map("map",{zoomControl:true,attributionControl:true}).setView([BASE.lat,BASE.lng],11);
+    var loaded=false,errs=0;
+    var t=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:"© OpenStreetMap"});
+    t.on("tileload",function(){loaded=true;mapOk=true;});
+    t.on("tileerror",function(){errs++;if(!loaded&&errs>=4)mapFail();});
+    t.addTo(map);
+    setTimeout(function(){if(!loaded)mapFail();},6000);
+    layer=L.layerGroup().addTo(map);
+  }catch(e){mapFail();}
+}
+function mapFail(){mapOk=false;$("mapWrap").hidden=true;$("mapOff").hidden=false;}
+function dot(color){return L.divIcon({className:"",html:'<div style="width:14px;height:14px;border-radius:50%;background:'+color+';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',iconSize:[14,14],iconAnchor:[7,7]});}
+function drawMarkers(list){
+  if(!map||!layer)return;
+  setTimeout(function(){map.invalidateSize();},50);
+  layer.clearLayers();
+  L.marker([BASE.lat,BASE.lng],{icon:dot("#e8445a")}).bindPopup("출발점: "+BASE.name).addTo(layer);
+  var pts=[[BASE.lat,BASE.lng]],shown=0;
+  list.forEach(function(r){
+    var p=r.lat!=null?{lat:r.lat,lng:r.lng,ref:false}:geo[r.id]?{lat:geo[r.id].lat,lng:geo[r.id].lng,ref:true}:null;
+    if(!p)return;shown++;
+    L.marker([p.lat,p.lng],{icon:dot(p.ref?"#f59a23":"#2f9e6a")}).bindPopup(esc(r.name)+(p.ref?"<br><small>주소 자동변환 위치(참고용)</small>":"")).addTo(layer);
+    pts.push([p.lat,p.lng]);
+  });
+  if(pts.length>1)map.fitBounds(pts,{padding:[30,30],maxZoom:14});else map.setView([BASE.lat,BASE.lng],11);
+  var missing=list.filter(function(r){return r.lat==null&&!geo[r.id];}).length;
+  $("mapMsg").textContent="빨간 점: 출발점 · 표시 "+shown+"곳"+(missing?" · 좌표 미확인 "+missing+"곳":"");
+  $("geoBtn").hidden=!missing;
+}
+// 확인된 좌표가 없는 식당은 주소를 OSM Nominatim으로 변환해 '참고용' 주황 점으로만 표시. 데이터에는 저장하지 않음.
+function geocodeCurrent(){
+  var list=DATA.filter(function(r){return r.category===current&&r.lat==null&&!geo[r.id];});
+  if(!list.length)return;
+  $("geoBtn").disabled=true;$("mapMsg").textContent="주소 변환 중… (1초에 하나씩)";
+  var i=0,fail=0;
+  (function next(){
+    if(i>=list.length){$("geoBtn").disabled=false;drawMarkers(DATA.filter(function(r){return r.category===current;}));
+      if(fail)$("mapMsg").textContent+=" · 변환 실패 "+fail+"곳";renderPlacesKeepMap();return;}
+    var r=list[i++],q=r.address.replace(/\s*\(.*?\)\s*/g," ").replace(/\s\d+층.*$/,"").replace(/,.*$/,"");
+    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q="+encodeURIComponent(q))
+      .then(function(res){return res.json();})
+      .then(function(j){if(j&&j[0])geo[r.id]={lat:+j[0].lat,lng:+j[0].lon};else fail++;})
+      .catch(function(){fail++;})
+      .then(function(){setTimeout(next,1100);});
+  })();
+}
+function renderPlacesKeepMap(){if(current)renderPlaces(current);}
+
+// ---- 테마 ----
+var themeIdx=0;
+$("themeBtn").addEventListener("click",function(){
+  var root=document.documentElement,dark=root.getAttribute("data-theme")==="dark"||(!root.getAttribute("data-theme")&&window.matchMedia("(prefers-color-scheme: dark)").matches);
+  root.setAttribute("data-theme",dark?"light":"dark");$("themeBtn").textContent=dark?"🌙":"☀️";
+});
+
+// ---- 이벤트 ----
+$("rerollBtn").addEventListener("click",function(){shownNow.forEach(function(id){seen[id]=1;});var r=rank();if(r.filter(function(x){return !x.yest;}).length<3){seen={};r=rank();}showCands(r);});
+$("goBtn").addEventListener("click",function(){seen={};$("rouletteBox").hidden=true;showCands(rank());$("result").scrollIntoView({behavior:"smooth",block:"start"});});
+$("randBtn").addEventListener("click",roulette);
+$("geoBtn").addEventListener("click",geocodeCurrent);
+$("openOnly").addEventListener("click",function(){openOnly=!openOnly;if(current)renderPlaces(current);});
+$("ateBtn").addEventListener("click",function(){
+  if(!current)return;var l=loadRecent();l.push({c:current,t:Date.now()});saveRecent(l);renderRecent();
+  $("ateBtn").textContent="기록했어요! 맛있게 드세요";setTimeout(function(){$("ateBtn").textContent="이거 먹기로 함!";},2200);
+});
+var DESSERTS=["후식은 딸기 🍓 (최애)","후식은 귤·한라봉·레드향 🍊","후식은 베리 한 접시 🫐","후식은 달달한 거 아무거나 🍰","아침이라면 사과 🍎 (퍽퍽한 사과는 절대 금지)","입가심 감귤주스 🧃"];
+$("dessert").textContent=DESSERTS[Math.floor(Math.random()*DESSERTS.length)];
+
+// 시작: restaurants.json이 같은 폴더에 있으면 그걸 우선 사용
+function prefillYesterday(){
+  var d=new Date();d.setHours(0,0,0,0);var start=d.getTime()-86400000,end=d.getTime();
+  loadRecent().forEach(function(r){if(r.t>=start&&r.t<end&&CAT[r.c]){var eq=Object.keys(BIG_EQ).filter(function(k){return BIG_EQ[k].indexOf(r.c)>=0;})[0];var l=eq||(CAT[r.c].fav>=FAV_MIN?CAT[r.c].ico+" "+CAT[r.c].short:MAIN[r.c]);if(!l)return;if(ans.yesterday.indexOf(l)<0)ans.yesterday.push(l);}});
+}
+function boot(){prefillYesterday();renderQuestions();renderRecent();initMap();showCands(rank());}
+try{
+  var get=function(u){return fetch(u,{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json();}).catch(function(){return null;});};
+  Promise.all([get("restaurants.json"),get("trends.json")]).then(function(v){
+    if(Array.isArray(v[0])&&v[0].length)DATA=v[0];
+    if(v[1]&&v[1].updatedAt)applyTrends(v[1]);
+  }).catch(function(){}).then(boot);
+}catch(e){boot();}
+})();
+</script>
+
+</body>
+</html>
