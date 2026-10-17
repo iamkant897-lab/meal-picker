@@ -142,7 +142,7 @@ details.more>*+*{margin-top:8px}
   </header>
 
   <section class="panel" id="quiz" aria-labelledby="qTitle">
-    <h2 id="qTitle">10초 질문</h2>
+    <h2 id="qTitle">30초 질문</h2>
     <p class="wx" id="wx" hidden></p>
     <div id="questions"></div>
     <div class="recent" id="recentBox"></div>
@@ -300,9 +300,8 @@ function renderQuestions(){
       });
       chips.appendChild(b);
     });
-    (q.adv?advBody:box).appendChild(d);
+    box.appendChild(d);
   });
-  box.appendChild(adv);
   box.style.display="flex";box.style.flexDirection="column";box.style.gap="14px";
 }
 function renderRecent(){
