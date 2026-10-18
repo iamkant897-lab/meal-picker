@@ -1,19 +1,68 @@
 {
- "updatedAt": "2026-10-17",
+ "updatedAt": "2026-10-19",
  "trend": [
-  {"cat": "donburi", "why": "한 그릇 덮밥 수요가 늘고 있어요 (덮밥류 +8.2%)", "source": "https://www.thinkfood.co.kr/news/articleView.html?idxno=103743"},
-  {"cat": "poke", "why": "샐러드 한 그릇 식사가 크게 늘었어요 (+22.2%)", "source": "https://www.thinkfood.co.kr/news/articleView.html?idxno=103743"},
-  {"cat": "yukhoe", "why": "육회·물회가 '컵푸드' 유행 메뉴로 꼽혀요", "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"},
-  {"cat": "mala", "why": "마라탕에 마라 꼬치까지, 여전히 유행", "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"},
-  {"cat": "hoe", "why": "요즘 보양식으로 회를 많이 찾아요", "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"}
+  {
+   "cat": "donburi",
+   "why": "한 그릇 덮밥 수요가 늘고 있어요 (덮밥류 +8.2%)",
+   "source": "https://www.thinkfood.co.kr/news/articleView.html?idxno=103743"
+  },
+  {
+   "cat": "poke",
+   "why": "샐러드 한 그릇이 2026년 뜨는 메뉴로 계속 꼽혀요 (+22.2%)",
+   "source": "https://www.thinkfood.co.kr/news/articleView.html?idxno=103743"
+  },
+  {
+   "cat": "yukhoe",
+   "why": "육회·물회가 '컵푸드' 유행 메뉴로 꼽혀요",
+   "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"
+  },
+  {
+   "cat": "mala",
+   "why": "마라탕에 마라 꼬치까지, 여전히 유행",
+   "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"
+  },
+  {
+   "cat": "hoe",
+   "why": "요즘 보양식으로 회를 많이 찾아요",
+   "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"
+  },
+  {
+   "cat": "galbi",
+   "why": "갈비가 국내 외식 메뉴 중 관심이 오르는 메뉴로 꼽혔어요",
+   "source": "https://tastewise.io/blog/south-korea-menu-trends"
+  }
  ],
  "trad": [
-  {"cat": "galbi", "why": "수원 하면 왕갈비, 수원 대표 음식", "source": null},
-  {"cat": "tongdak", "why": "팔달문 통닭거리의 가마솥 옛날통닭", "source": null},
-  {"cat": "sundae", "why": "지동시장 순대타운 순대볶음", "source": null},
-  {"cat": "hansik", "why": "한 상 가득 한정식·비빔밥", "source": null},
-  {"cat": "gukbap", "why": "뜨끈한 국밥·찌개 한 그릇", "source": null},
-  {"cat": "noodle", "why": "칼국수·냉면 노포", "source": null}
+  {
+   "cat": "galbi",
+   "why": "수원 하면 왕갈비, 수원 대표 음식",
+   "source": null
+  },
+  {
+   "cat": "tongdak",
+   "why": "팔달문 통닭거리의 가마솥 옛날통닭",
+   "source": null
+  },
+  {
+   "cat": "sundae",
+   "why": "지동시장 순대타운 순대볶음",
+   "source": null
+  },
+  {
+   "cat": "hansik",
+   "why": "한 상 가득 한정식·비빔밥",
+   "source": null
+  },
+  {
+   "cat": "gukbap",
+   "why": "뜨끈한 국밥·찌개 한 그릇",
+   "source": null
+  },
+  {
+   "cat": "noodle",
+   "why": "칼국수·냉면 노포",
+   "source": null
+  }
  ],
  "cats": []
 }
