@@ -1,5 +1,5 @@
 {
- "updatedAt": "2026-10-19",
+ "updatedAt": "2026-10-26",
  "trend": [
   {
    "cat": "donburi",
@@ -8,8 +8,13 @@
   },
   {
    "cat": "poke",
-   "why": "샐러드 한 그릇이 2026년 뜨는 메뉴로 계속 꼽혀요 (+22.2%)",
-   "source": "https://www.thinkfood.co.kr/news/articleView.html?idxno=103743"
+   "why": "샐러드가 일상 한 끼로 자리 잡는 중이에요 (취식 순위 15→13위)",
+   "source": "https://www.dailian.co.kr/news/view/1699298/"
+  },
+  {
+   "cat": "burger",
+   "why": "버거 주문이 늘고 아침 버거까지 나왔어요 (배달 +14.2%)",
+   "source": "https://www.dailian.co.kr/news/view/1699298/"
   },
   {
    "cat": "yukhoe",
@@ -25,11 +30,6 @@
    "cat": "hoe",
    "why": "요즘 보양식으로 회를 많이 찾아요",
    "source": "https://www.foodbank.co.kr/news/articleView.html?idxno=67253"
-  },
-  {
-   "cat": "galbi",
-   "why": "갈비가 국내 외식 메뉴 중 관심이 오르는 메뉴로 꼽혔어요",
-   "source": "https://tastewise.io/blog/south-korea-menu-trends"
   }
  ],
  "trad": [
